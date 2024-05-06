@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag'
 
 jobs:
   build_linux32:
@@ -14,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
         run: |
@@ -37,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: 'recursive'
+          submodules: "recursive"
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
         run: |
