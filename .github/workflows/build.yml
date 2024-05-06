@@ -25,7 +25,7 @@ jobs:
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
-          repo_name: A5R13L/gmsv_apakr
+          repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
@@ -48,7 +48,7 @@ jobs:
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
-          repo_name: A5R13L/gmsv_apakr
+          repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
