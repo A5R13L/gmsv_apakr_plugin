@@ -1,4 +1,4 @@
-# gmsv_apakr
+# gmsv_apakr_plugin
 
 A Garry's Mod server plugin that speeds up Lua File downloading by packing everything into a BSP and using FastDL to download it.
 
