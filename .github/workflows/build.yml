@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build_linux32:
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Build 32-bit
+        working-directory: ${{ github.workspace }}
+        run: |
+          premake5 gmake2
+          cd projects/x32/linux/gmake2
+          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17" LDFLAGS="-lpthread"
+      - name: Release
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_name: A5R13L/gmsv_apakr
+          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          body: "gmsv_apakr_plugin"
+          file: projects/x32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
+          asset_name: gmsv_apakr_plugin_32.so
+  build_linux64:
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+      - name: Build 64-bit
+        working-directory: ${{ github.workspace }}
+        run: |
+          premake5 gmake2
+          cd projects/x64/linux/gmake2
+          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++17" LDFLAGS="-lpthread"
+      - name: Release
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_name: A5R13L/gmsv_apakr
+          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          body: "gmsv_apakr_plugin"
+          file: projects/x64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
+          asset_name: gmsv_apakr_plugin_64.so
