@@ -12,6 +12,7 @@
 #include <filesystem_base.h>
 #include <Bootil/Bootil.h>
 #include <igameevents.h>
+#include <curl/curl.h>
 #include <filesystem>
 #include <iserver.h>
 #include <iclient.h>
@@ -156,7 +157,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     bool Ready = false;
     bool NeedsRepack = false;
     bool Packing = false;
-    std::map<std::string, std::pair<std::string, int>> FileMap;
+    std::unordered_map<std::string, std::pair<std::string, int>> FileMap;
     std::map<int, DataPackEntry> DataPackMap;
 
     CApakrPlugin(){};
@@ -204,6 +205,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     void CheckForRepack();
     Bootil::AutoBuffer GetDataPackBuffer();
     void SetupClientFiles();
+    bool UploadDataPack(std::string &UploadURL, std::string &Pack, std::vector<std::string> &PreviousPacks);
     void BuildAndWriteDataPack();
     void SetupFastDL(std::string Path, std::string PreviousPath);
 };
