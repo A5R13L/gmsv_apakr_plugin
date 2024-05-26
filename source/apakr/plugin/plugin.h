@@ -1,32 +1,38 @@
 #include <GarrysMod/InterfacePointers.hpp>
 #include <GarrysMod/FunctionPointers.hpp>
+#include <apakr/cnetworkstringtable.h>
 #include <GarrysMod/Lua/Interface.h>
 #include <apakr/plugin/encryption.h>
-#include <apakr/plugin/shellcode.h>
-#include <detouring/classproxy.hpp>
-#include <apakr/cnetworkstringtable.h>
-#include <../utils/lzma/C/Sha256.h>
 #include <../utils/lzma/C/LzmaLib.h>
+#include <detouring/classproxy.hpp>
+#include <../utils/lzma/C/Sha256.h>
+#include <apakr/plugin/shellcode.h>
 #include <engine/iserverplugin.h>
 #include <GarrysMod/Symbol.hpp>
 #include <filesystem_base.h>
+#include <inetmsghandler.h>
 #include <Bootil/Bootil.h>
+#include <bzip2/bzlib.h>
 #include <igameevents.h>
+#include <inetchannel.h>
 #include <curl/curl.h>
 #include <filesystem>
+#include <pthread.h>
 #include <iserver.h>
 #include <iclient.h>
-#include <eiface.h>
 #include <convar.h>
+#include <eiface.h>
 #include <iomanip>
-#include <pthread.h>
-#include <thread>
 #include <random>
+#include <thread>
 #include <map>
 
 #ifndef FCVAR_LUA_SERVER
 #define FCVAR_LUA_SERVER (1 << 19)
 #endif
+
+#define BZ2_DEFAULT_BLOCKSIZE100k 9
+#define BZ2_DEFAULT_WORKFACTOR 0
 
 using Time = std::chrono::system_clock::time_point;
 using _32CharArray = std::array<char, 32>;
@@ -141,7 +147,29 @@ struct GmodPlayer
     }
 };
 
-struct DataPackEntry;
+struct DataPackEntry
+{
+    std::string Path = "";
+    std::string String = "";
+    int Size = 0;
+    std::string OriginalString = "";
+    int OriginalSize = 0;
+    _32CharArray SHA256 = {};
+    std::vector<char> Compressed = {};
+
+    DataPackEntry(){};
+    DataPackEntry(std::string _Path, std::string _String, std::string _Original);
+};
+
+struct FileEntry
+{
+    std::string Contents = "";
+    int Size = 0;
+    char *SHA256 = nullptr;
+
+    FileEntry(){};
+    FileEntry(std::string _Contents, int _Size);
+};
 
 class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
 {
@@ -157,7 +185,10 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     bool Ready = false;
     bool NeedsRepack = false;
     bool Packing = false;
-    std::unordered_map<std::string, std::pair<std::string, int>> FileMap;
+    bool FailedUpload = false;
+    bool Disabled = false;
+    bool WasDisabled = false;
+    std::unordered_map<std::string, FileEntry> FileMap;
     std::map<int, DataPackEntry> DataPackMap;
 
     CApakrPlugin(){};
@@ -206,8 +237,9 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     Bootil::AutoBuffer GetDataPackBuffer();
     void SetupClientFiles();
     bool UploadDataPack(std::string &UploadURL, std::string &Pack, std::vector<std::string> &PreviousPacks);
+    bool CanDownloadPack(std::string DownloadURL);
     void BuildAndWriteDataPack();
-    void SetupFastDL(std::string Path, std::string PreviousPath);
+    void SetupDL(std::string Path, std::string PreviousPath);
 };
 
 class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPackProxy>
@@ -225,38 +257,13 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     std::string GetHexSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(std::string Data);
     std::string SHA256ToHex(_32CharArray SHA256);
-    std::vector<char> Compress(std::string &Input);
     std::vector<char> Compress(char *Input, int Size);
+    std::vector<char> Compress(std::string &Input);
+    std::vector<char> BZ2(char *Input, int Size);
     void SendDataPackFile(int Client, int FileID);
     void SendFileToClient(int Client, int FileID);
 
   private:
     FunctionPointers::GModDataPack_AddOrUpdateFile_t AddOrUpdateFile_Original;
     FunctionPointers::GModDataPack_SendFileToClient_t SendFileToClient_Original;
-};
-
-struct DataPackEntry
-{
-    std::string Path = "";
-    std::string String = "";
-    int Size = 0;
-    std::string OriginalString = "";
-    int OriginalSize = 0;
-    _32CharArray SHA256 = {};
-    std::vector<char> Compressed = {};
-
-    DataPackEntry()
-    {
-    }
-
-    DataPackEntry(std::string _Path, std::string _String, std::string _Original)
-    {
-        this->Path = _Path;
-        this->String = ReplaceAll(_String, "\r", "");
-        this->Size = this->String.size() + 1;
-        this->OriginalString = _Original;
-        this->OriginalSize = this->OriginalString.size() + 1;
-        this->SHA256 = GModDataPackProxy::Singleton.GetSHA256(this->String.data(), this->Size);
-        this->Compressed = GModDataPackProxy::Singleton.Compress(this->String);
-    }
 };

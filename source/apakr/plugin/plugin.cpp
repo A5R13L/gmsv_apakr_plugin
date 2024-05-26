@@ -9,7 +9,55 @@ ConVar *apakr_key = nullptr;
 ConVar *apakr_clone_directory = nullptr;
 ConVar *apakr_upload_url = nullptr;
 ConVar *sv_downloadurl = nullptr;
+bool DownloadURLChanged = false;
 std::string CurrentDownloadURL;
+
+void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloat)
+{
+    Msg("\x1B[94m[Apakr]: \x1B[97apakr_clone_directory was changed. Issuing repack.\n");
+
+    INSTANCE->NeedsRepack = true;
+}
+
+void OnUploadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
+{
+    Msg("\x1B[94m[Apakr]: \x1B[97apakr_upload_url was changed. Issuing repack.\n");
+
+    INSTANCE->NeedsRepack = true;
+}
+
+void OnDownloadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
+{
+    if (DownloadURLChanged)
+        return;
+
+    Msg("\x1B[94m[Apakr]: \x1B[97msv_downloadurl was changed. Issuing repack.\n");
+
+#if defined(APAKR_32_SERVER)
+    CurrentDownloadURL = sv_downloadurl->GetString();
+#else
+    CurrentDownloadURL = sv_downloadurl->Get<const char *>();
+#endif
+
+    INSTANCE->NeedsRepack = true;
+}
+
+DataPackEntry::DataPackEntry(std::string _Path, std::string _String, std::string _Original)
+{
+    this->Path = _Path;
+    this->String = ReplaceAll(_String, "\r", "");
+    this->Size = this->String.size() + 1;
+    this->OriginalString = _Original;
+    this->OriginalSize = this->OriginalString.size() + 1;
+    this->SHA256 = GModDataPackProxy::Singleton.GetSHA256(this->String.data(), this->Size);
+    this->Compressed = GModDataPackProxy::Singleton.Compress(this->String);
+}
+
+FileEntry::FileEntry(std::string _Contents, int _Size)
+{
+    this->Contents = _Contents;
+    this->Size = _Size;
+}
 
 bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory)
 {
@@ -67,13 +115,16 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     apakr_sha256 = new ConVar("apakr_sha256", "", FCVAR_GAMEDLL | FCVAR_REPLICATED | FCVAR_LUA_SERVER);
     apakr_key = new ConVar("apakr_key", "", FCVAR_GAMEDLL | FCVAR_REPLICATED | FCVAR_LUA_SERVER);
 
-    apakr_clone_directory = new ConVar("apakr_clone_directory", "", FCVAR_GAMEDLL | FCVAR_LUA_SERVER,
-                                       "Where to clone the data packs for FastDL.");
+    apakr_clone_directory =
+        new ConVar("apakr_clone_directory", "", FCVAR_GAMEDLL | FCVAR_LUA_SERVER,
+                   "Where to clone the data packs for FastDL.", (FnChangeCallback_t)OnCloneDirectoryChanged);
 
     apakr_upload_url = new ConVar("apakr_upload_url", "https://apakr.asriel.dev/", FCVAR_GAMEDLL | FCVAR_LUA_SERVER,
-                                  "Custom self-hosting url.");
+                                  "Custom self-hosting url.", (FnChangeCallback_t)OnUploadURLChanged);
 
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
+
+    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
 
 #if defined(APAKR_32_SERVER)
     CurrentDownloadURL = sv_downloadurl->GetString();
@@ -119,6 +170,9 @@ void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxC
 void CApakrPlugin::GameFrame(bool Simulating)
 {
     this->CheckForRepack();
+
+    if (this->Disabled)
+        return;
 
     if (this->Packing)
         for (GmodPlayer *Player : this->Players)
@@ -167,6 +221,8 @@ void CApakrPlugin::CheckForRepack()
     this->LastRepack = std::chrono::system_clock::now();
     this->UnpackedSize = 0;
     this->PackedSize = 0;
+    this->WasDisabled = this->Disabled;
+    this->Disabled = false;
 
     Msg("\x1B[94m[Apakr]: \x1B[97mRebuilding data pack file...\n");
     this->SetupClientFiles();
@@ -221,37 +277,61 @@ Bootil::AutoBuffer CApakrPlugin::GetDataPackBuffer()
 
 void CApakrPlugin::SetupClientFiles()
 {
-    for (int Index = 1; Index < g_pClientLuaFiles->GetNumStrings(); Index++)
+    if (this->Disabled && this->WasDisabled)
+        return;
+
+    for (int Index = 1; Index < g_pClientLuaFiles->GetNumStrings(); ++Index)
     {
         const char *Path = g_pClientLuaFiles->GetString(Index);
+        FileEntry &FileMapEntry = this->FileMap[Path];
+        DataPackEntry &DataPackMapEntry = this->DataPackMap[Index];
 
-        if (!this->FileMap[Path].first.empty())
+        if (FileMapEntry.Contents.empty())
+            continue;
+
+        if (this->Disabled)
+            g_pClientLuaFiles->SetStringUserData(Index, 32, FileMapEntry.SHA256);
+        else
         {
-            this->UnpackedSize += this->FileMap[Path].second;
+            if (this->WasDisabled)
+                g_pClientLuaFiles->SetStringUserData(Index, 32, DataPackMapEntry.SHA256.data());
 
-            if (this->DataPackMap[Index].Compressed.empty())
+            this->UnpackedSize += FileMapEntry.Size;
+
+            if (!FileMapEntry.SHA256)
             {
-                std::string DataPackContent;
+                FileMapEntry.SHA256 = new char[32];
+                const char *Data = (const char *)g_pClientLuaFiles->GetStringUserData(Index, nullptr);
 
-                if (strstr(Path, "lua/includes/init.lua"))
-                {
-                    std::string Shellcode = APAKR_SHELLCODE;
+                for (int ByteIndex = 0; ByteIndex < 32; ++ByteIndex)
+                    FileMapEntry.SHA256[ByteIndex] = Data[ByteIndex];
+            }
 
-                    DataPackContent = ReplaceAll(Shellcode, "{APAKR_DECRYPTION_FUNCTION}", APAKR_DECRYPTION_FUNCTION);
-                    DataPackContent.append("\n\n").append(this->FileMap[Path].first);
-                }
-                else
-                    DataPackContent = "return APakr()()";
+            if (!DataPackMapEntry.Compressed.empty())
+            {
 
-                this->DataPackMap[Index] = DataPackEntry(Path, DataPackContent, this->FileMap[Path].first);
+                DataPackMapEntry.OriginalString = FileMapEntry.Contents;
+                DataPackMapEntry.OriginalSize = DataPackMapEntry.OriginalString.size() + 1;
 
-                g_pClientLuaFiles->SetStringUserData(Index, 32, this->DataPackMap[Index].SHA256.data());
+                continue;
+            }
+
+            std::string DataPackContent;
+
+            if (strstr(Path, "lua/includes/init.lua"))
+            {
+                std::string Shellcode = APAKR_SHELLCODE;
+
+                DataPackContent = ReplaceAll(Shellcode, "{APAKR_DECRYPTION_FUNCTION}", APAKR_DECRYPTION_FUNCTION);
+
+                DataPackContent.append("\n\n").append(FileMapEntry.Contents);
             }
             else
-            {
-                this->DataPackMap[Index].OriginalString = this->FileMap[Path].first;
-                this->DataPackMap[Index].OriginalSize = this->DataPackMap[Index].OriginalString.size() + 1;
-            }
+                DataPackContent = "return APakr()()";
+
+            DataPackMapEntry = this->DataPackMap[Index] = DataPackEntry(Path, DataPackContent, FileMapEntry.Contents);
+
+            g_pClientLuaFiles->SetStringUserData(Index, 32, DataPackMapEntry.SHA256.data());
         }
     }
 }
@@ -292,6 +372,30 @@ size_t WriteCallback(void *Pointer, size_t Size, size_t Bytes, void *Stream)
     return fwrite(Pointer, Size, Bytes, (FILE *)Stream);
 }
 
+size_t WriteEmptyCallback(void *Pointer, size_t Size, size_t Bytes, void *Stream)
+{
+    return Size * Bytes;
+}
+
+size_t HeaderCallback(char *Buffer, size_t Size, size_t Items, std::map<std::string, std::string> *Headers)
+{
+    std::string HeaderLine = Buffer;
+
+    HeaderLine = HeaderLine.substr(0, HeaderLine.size() - 2);
+
+    if (HeaderLine.empty())
+        return Size * Items;
+
+    size_t Separator = HeaderLine.find(':');
+
+    if (Separator == std::string::npos)
+        return Size * Items;
+
+    (*Headers)[HeaderLine.substr(0, Separator)] = HeaderLine.substr(Separator + 2);
+
+    return Size * Items;
+}
+
 bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std::vector<std::string> &PreviousPacks)
 {
     Msg("\x1B[94m[Apakr]: \x1b[97mUploading data pack...\n");
@@ -307,39 +411,51 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
     }
 
     CURL *Handle = curl_easy_init();
+    std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+
+    ServerIP = ServerIP.substr(0, ServerIP.find(":"));
 
     if (Handle)
     {
+        std::string AuthorizationHeader = "Authorization: ";
+        std::string DownloadURLHeader = "X-Download-URL: ";
+        curl_slist *Headers = nullptr;
+        FILE *HTTPUploadLog = nullptr;
+        char ErrorBuffer[CURL_ERROR_SIZE];
         curl_mime *Form = curl_mime_init(Handle);
         curl_mimepart *Field = curl_mime_addpart(Form);
-        char ErrorBuffer[CURL_ERROR_SIZE];
-        curl_slist *Headers = nullptr;
+        long HTTPCode;
+        CURLcode ResponseCode;
+        std::map<std::string, std::string> ResponseHeaders;
 
         LastPercentage = -1;
-
-        Headers = curl_slist_append(Headers, "User-Agent: Valve/Steam HTTP Client 1.0 (4000)");
-
-        std::string AuthorizationHeader = "Authorization: ";
-
-        AuthorizationHeader += GModDataPackProxy::Singleton.GetHexSHA256(g_pVEngineServer->GMOD_GetServerAddress());
-
-        printf("AuthorizationHeader = %s\n", AuthorizationHeader.c_str());
-
+        AuthorizationHeader += GModDataPackProxy::Singleton.GetHexSHA256(ServerIP);
+        DownloadURLHeader += CurrentDownloadURL;
         Headers = curl_slist_append(Headers, AuthorizationHeader.c_str());
+        Headers = curl_slist_append(Headers, DownloadURLHeader.c_str());
+        Headers = curl_slist_append(Headers, "User-Agent: apakr_server");
 
         curl_mime_name(Field, "file");
         curl_mime_filename(Field, Pack.c_str());
         curl_mime_filedata(Field, FullPath);
 
+        std::string DeletionRequest = "[";
+
         for (std::string &File : PreviousPacks)
         {
-            Field = curl_mime_addpart(Form);
+            if (DeletionRequest != "[")
+                DeletionRequest += ",";
 
-            curl_mime_name(Field, "delete");
-            curl_mime_data(Field, File.c_str(), CURL_ZERO_TERMINATED);
+            DeletionRequest += "\"" + File + "\"";
         }
-    
-        auto FileHandle = fopen("apakr_http_upload.log", "wb");
+
+        DeletionRequest += "]";
+        Field = curl_mime_addpart(Form);
+
+        curl_mime_name(Field, "delete");
+        curl_mime_data(Field, DeletionRequest.c_str(), CURL_ZERO_TERMINATED);
+
+        HTTPUploadLog = fopen("apakr_http_upload.log", "wb");
 
         curl_easy_setopt(Handle, CURLOPT_URL, UploadURL.c_str());
         curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
@@ -347,34 +463,138 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         curl_easy_setopt(Handle, CURLOPT_NOPROGRESS, 0);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer);
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, FileHandle);
+        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, HTTPUploadLog);
         curl_easy_setopt(Handle, CURLOPT_XFERINFOFUNCTION, ProgressCallback);
         curl_easy_setopt(Handle, CURLOPT_XFERINFODATA, nullptr);
+        curl_easy_setopt(Handle, CURLOPT_HEADERFUNCTION, HeaderCallback);
+        curl_easy_setopt(Handle, CURLOPT_HEADERDATA, &ResponseHeaders);
 
-        CURLcode Response = curl_easy_perform(Handle);
-        long ResponseCode;
+        ResponseCode = curl_easy_perform(Handle);
 
-        curl_easy_getinfo(Handle, CURLINFO_HTTP_CODE, &ResponseCode);
+        curl_easy_getinfo(Handle, CURLINFO_HTTP_CODE, &HTTPCode);
         curl_mime_free(Form);
         curl_easy_cleanup(Handle);
-        fclose(FileHandle);
+        fclose(HTTPUploadLog);
 
-        if (Response != CURLE_OK)
+        if (ResponseCode != CURLE_OK)
         {
-            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid curl code [%d] while uploading.\n", Response);
+            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid curl code [%d] while uploading.\n", ResponseCode);
 
             return false;
         }
 
-        if (ResponseCode != 200)
+        if (HTTPCode != 200)
         {
-            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%d] while uploading.\n", ResponseCode);
+            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while uploading.\n", HTTPCode);
 
             return false;
         }
+
+        std::string XDownloadURL = ResponseHeaders["x-download-url"];
+
+        if (XDownloadURL.empty())
+        {
+            Msg("\x1B[94m[Apakr]: \x1b[97mX-Download-URL was not sent in response headers.\n");
+
+            return false;
+        }
+
+        Msg("\x1B[94m[Apakr]: \x1b[97mData pack uploaded successfully! Checking if it is reachable...\n");
+
+        DownloadURLChanged = true;
+
+        sv_downloadurl->SetValue(XDownloadURL.c_str());
+
+        DownloadURLChanged = false;
+
+        if (!this->CanDownloadPack(XDownloadURL))
+            return false;
     }
 
     return true;
+}
+
+bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
+{
+    CURL *Handle = curl_easy_init();
+
+    if (Handle)
+    {
+        curl_slist *Headers = nullptr;
+        char ErrorBuffer[CURL_ERROR_SIZE];
+        long HTTPCode;
+        CURLcode ResponseCode;
+
+        Headers = curl_slist_append(Headers, "User-Agent: Half-Life 2");
+        DownloadURL += "data/apakr/" + this->CurrentPackName + ".bsp.bz2";
+
+        curl_easy_setopt(Handle, CURLOPT_URL, DownloadURL.c_str());
+        curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
+        curl_easy_setopt(Handle, CURLOPT_NOPROGRESS, 1);
+        curl_easy_setopt(Handle, CURLOPT_FOLLOWLOCATION, 1);
+        curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteEmptyCallback);
+        curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer);
+
+        ResponseCode = curl_easy_perform(Handle);
+
+        curl_easy_getinfo(Handle, CURLINFO_HTTP_CODE, &HTTPCode);
+        curl_easy_cleanup(Handle);
+
+        if (ResponseCode != CURLE_OK)
+        {
+            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid curl code [%d] while checking if data pack is "
+                "downloadable.\n",
+                ResponseCode);
+
+            return false;
+        }
+        if (HTTPCode != 200)
+        {
+            Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while checking if data pack is "
+                "downloadable.\n",
+                HTTPCode);
+
+            return false;
+        }
+
+        Msg("\x1B[94m[Apakr]: \x1b[97mData pack is reachable!\n");
+
+        return true;
+    }
+
+    return false;
+}
+
+void AttemptDataPackUpload_Thread(std::string UploadURL, std::string CurrentFile, std::string Path,
+                                  std::vector<std::string> PreviousPacks, int Attempt)
+{
+    if (Attempt == 3)
+    {
+        INSTANCE->Packing = false;
+        INSTANCE->Disabled = true;
+
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to upload data pack after 3 tries. Falling back to regular networking.\n");
+        g_pFullFileSystem->RemoveFile(Path.c_str(), "GAME");
+        INSTANCE->SetupClientFiles();
+
+        return;
+    }
+
+    Msg("\x1B[94m[Apakr]: \x1B[97mData pack encountered an error while uploading! Retrying in 5 seconds.\n");
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    if (!INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks))
+        return AttemptDataPackUpload_Thread(UploadURL, CurrentFile, Path, PreviousPacks, Attempt + 1);
+
+    Msg("\x1B[94m[Apakr]: \x1B[97mData pack is ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
+        "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
+        INSTANCE->PackedFiles, HumanSize(INSTANCE->UnpackedSize).c_str(), HumanSize(INSTANCE->PackedSize).c_str(),
+        PercentageDifference(INSTANCE->UnpackedSize, INSTANCE->PackedSize),
+        TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
+
+    INSTANCE->SetupDL(Path, CurrentFile);
+
+    INSTANCE->Packing = false;
 }
 
 void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
@@ -388,8 +608,9 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
     std::string CurrentFile = Path;
     Bootil::AutoBuffer EncryptedDataPack;
     CUtlBuffer FileContents;
+    std::vector<std::string> PreviousPacks;
 
-    CurrentFile.append(INSTANCE->CurrentPackName).append(".bsp");
+    CurrentFile.append(INSTANCE->CurrentPackName).append(".bsp.bz2");
 
     INSTANCE->CurrentPackSHA256 =
         GModDataPackProxy::Singleton.GetHexSHA256((char *)DataPack.GetBase(), DataPack.GetSize());
@@ -397,27 +618,43 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
     INSTANCE->CurrentPackName =
         GModDataPackProxy::Singleton.GetHexSHA256(INSTANCE->CurrentPackSHA256 + INSTANCE->CurrentPackKey).substr(0, 32);
 
-    std::string CurrentPath = Path + INSTANCE->CurrentPackName + ".bsp";
+    std::string CurrentPath = Path + INSTANCE->CurrentPackName + ".bsp.bz2";
 
     if (g_pFullFileSystem->FileExists(CurrentPath.c_str(), "GAME"))
     {
-        Msg("\x1B[94m[Apakr]: \x1B[97mData pack is the same, we're all set!\n");
+        apakr_file->SetValue(INSTANCE->CurrentPackName.c_str());
+        apakr_sha256->SetValue(INSTANCE->CurrentPackSHA256.c_str());
+        apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
+        Msg("\x1B[94m[Apakr]: \x1B[97mData pack is the same, skipping repack!\n");
 
-        INSTANCE->SetupFastDL(Path, CurrentFile);
+        if (!UploadURL.empty())
+            INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, CurrentPath, PreviousPacks);
+        else
+            INSTANCE->FailedUpload = false;
+
+        if (INSTANCE->FailedUpload)
+            return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, CurrentPath, PreviousPacks, 1)
+                .detach();
+
+        INSTANCE->SetupDL(CurrentPath, CurrentFile);
 
         INSTANCE->Packing = false;
 
         return;
     }
 
-    char *Buffer = (char *)DataPack.GetBase();
-    std::vector<char> CompressedData = GModDataPackProxy::Singleton.Compress(Buffer, DataPack.GetSize());
+    std::vector<char> CompressedData =
+        GModDataPackProxy::Singleton.Compress((char *)DataPack.GetBase(), DataPack.GetSize());
+
     Bootil::AutoBuffer CompressedDataPack(CompressedData.size());
-    std::vector<std::string> PreviousPacks;
 
     CompressedDataPack.Write(CompressedData.data(), CompressedData.size());
     Apakr_Encrypt(CompressedDataPack, EncryptedDataPack, INSTANCE->CurrentPackKey);
-    FileContents.Put(EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
+
+    std::vector<char> BZ2Data =
+        GModDataPackProxy::Singleton.BZ2((char *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
+
+    FileContents.Put(BZ2Data.data(), BZ2Data.size());
 
     const char *FileName = g_pFullFileSystem->FindFirst("data/apakr/*", &FindHandle);
 
@@ -442,7 +679,7 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
 
     g_pFullFileSystem->FindClose(FindHandle);
     g_pFullFileSystem->CreateDirHierarchy(Path.c_str(), "GAME");
-    Path.append(INSTANCE->CurrentPackName).append(".bsp");
+    Path.append(INSTANCE->CurrentPackName).append(".bsp.bz2");
     apakr_file->SetValue(INSTANCE->CurrentPackName.c_str());
     apakr_sha256->SetValue(INSTANCE->CurrentPackSHA256.c_str());
     apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
@@ -481,8 +718,13 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
 
     g_pFullFileSystem->Close(Handle);
 
-    if (!UploadURL.empty() && INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks))
-        g_pFullFileSystem->RemoveFile(Path.c_str(), "GAME");
+    if (!UploadURL.empty())
+        INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks);
+    else
+        INSTANCE->FailedUpload = false;
+
+    if (INSTANCE->FailedUpload)
+        return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, Path, PreviousPacks, 1).detach();
 
     Msg("\x1B[94m[Apakr]: \x1B[97mData pack is ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
         "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
@@ -490,7 +732,7 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
         PercentageDifference(INSTANCE->UnpackedSize, INSTANCE->PackedSize),
         TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
 
-    INSTANCE->SetupFastDL(Path, CurrentFile);
+    INSTANCE->SetupDL(Path, CurrentFile);
 
     INSTANCE->Packing = false;
 }
@@ -513,18 +755,29 @@ void CApakrPlugin::BuildAndWriteDataPack()
     std::thread(BuildAndWriteDataPack_Thread, ClonePath, UploadURL).detach();
 }
 
-void CApakrPlugin::SetupFastDL(std::string Path, std::string PreviousPath)
+void CApakrPlugin::SetupDL(std::string Path, std::string PreviousPath)
 {
+    if (PreviousPath.find("bz2") != std::string::npos)
+        PreviousPath = PreviousPath.substr(0, PreviousPath.size() - 4);
+
+    if (Path.find("bz2") != std::string::npos)
+        Path = Path.substr(0, Path.size() - 4);
+
     if (g_pDownloadables->FindStringIndex(PreviousPath.c_str()) != INVALID_STRING_INDEX)
     {
         g_pDownloadables->m_pItems->m_Items.Remove(PreviousPath.c_str());
-        Msg("\x1B[94m[Apakr]: \x1B[97mRemoved \x1B[96mprevious \x1B[97mdata pack from \x1B[93mFastDL\x1B[97m.\n");
+
+        Msg("\x1B[94m[Apakr]: \x1B[97mRemoved \x1B[96mprevious \x1B[97mdata pack \x1B[96m%s \x1B[97mfrom "
+            "\x1B[93mFastDL\x1B[97m.\n",
+            PreviousPath.c_str());
     }
 
     if (g_pDownloadables->FindStringIndex(Path.c_str()) == INVALID_STRING_INDEX)
     {
         g_pDownloadables->AddString(true, Path.c_str(), Path.size());
-        Msg("\x1B[94m[Apakr]: \x1B[97mServing data pack via \x1B[93mFastDL\x1B[97m.\n");
+
+        Msg("\x1B[94m[Apakr]: \x1B[97mServing data pack \x1B[96m%s \x1B[97mvia \x1B[93mFastDL\x1B[97m.\n",
+            Path.c_str());
     }
 }
 
@@ -583,9 +836,9 @@ void GModDataPackProxy::AddOrUpdateFile(GmodDataPackFile *FileContents, bool Ref
 
     g_pFullFileSystem->Close(Handle);
 
-    INSTANCE->FileMap[FileContents->name] = {FileContents->contents, FileSize};
+    INSTANCE->FileMap[FileContents->name] = FileEntry(FileContents->contents, FileSize);
 
-    ReplaceAll(INSTANCE->FileMap[FileContents->name].first, "\r", "");
+    ReplaceAll(INSTANCE->FileMap[FileContents->name].Contents, "\r", "");
 
     if (Refresh)
         Msg("\x1B[94m[Apakr]: \x1B[97mAutorefresh: \x1B[93m%s\x1B[97m. Rebuilding data pack...\n", FileContents->name);
@@ -627,11 +880,6 @@ std::string GModDataPackProxy::SHA256ToHex(_32CharArray SHA256)
     return Stream.str();
 }
 
-std::vector<char> GModDataPackProxy::Compress(std::string &Input)
-{
-    return this->Compress((char *)Input.data(), Input.size() + 1);
-}
-
 std::vector<char> GModDataPackProxy::Compress(char *Input, int Size)
 {
     size_t InputLength = Size;
@@ -662,6 +910,25 @@ std::vector<char> GModDataPackProxy::Compress(char *Input, int Size)
     return Output;
 }
 
+std::vector<char> GModDataPackProxy::Compress(std::string &Input)
+{
+    return this->Compress((char *)Input.data(), Input.size() + 1);
+}
+
+std::vector<char> GModDataPackProxy::BZ2(char *Input, int Size)
+{
+    unsigned int CompressedSize = Size + (Size / 100) + 600;
+    std::vector<char> Output(CompressedSize);
+
+    if (BZ2_bzBuffToBuffCompress(Output.data(), &CompressedSize, Input, Size, BZ2_DEFAULT_BLOCKSIZE100k, 0,
+                                 BZ2_DEFAULT_WORKFACTOR) != BZ_OK)
+        return {};
+
+    Output.resize(CompressedSize);
+
+    return Output;
+}
+
 void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
 {
     if (FileID < 1 || FileID > g_pClientLuaFiles->GetNumStrings())
@@ -687,6 +954,9 @@ void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
 
 void GModDataPackProxy::SendFileToClient(int Client, int FileID)
 {
+    if (INSTANCE->Disabled)
+        return Call(this->Singleton.SendFileToClient_Original, Client, FileID);
+
     this->SendDataPackFile(Client, FileID);
 }
 

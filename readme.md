@@ -18,13 +18,12 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 
 | What        | gluapack                                               | apakr                                                                                               |
 | ----------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Server Lag  | ❌ During auto refresh & pack building.                | ✔ No lag due to multi-threading.                                                                   |
-| Connections | ❌ Blocks connections during pack build & upload.      | ✔ Connection is not blocked. `IClient::Reconnect` is used during build.                            |
-| Loading     | ❌ Kicks people who are loading in during pack build.  | ✔ Loading is as normal, when pack is rebuilt, `IClient::Reconnect` is called.                      |
-| Reliability | ❌ Will turn off completely if health check fails.     | ✔ Seamless and does not require health checks.                                                     |
-| Performance | ❌ Uses C->Lua->C communication which is slow.         | ✔ Uses C interfaces for communication, and does not use Lua states at all.                         |
-| Usability   | ❌ You must self-host a php file / use given hosting.  | ✔ Relies on the server itself, along with support for external FastDL via `apakr_clone_directory`. |
-
+| Server Lag  | ❌ During auto refresh & pack building.                | ✔ No lag due to multi-threading.                                                                                    |
+| Connections | ❌ Blocks connections during pack build & upload.      | ✔ Connection is not blocked. `IClient::Reconnect` is used during build.                                                                                       |
+| Loading     | ❌ Kicks people who are loading in during pack build.  | ✔ Loading is as normal, when pack is rebuilt, `IClient::Reconnect` is called.                                                                     |
+| Reliability | ❌ Will turn off completely if health check fails.     | ✔ Seamless and does not require health checks.                                                                                             |
+| Performance | ❌ Uses C->Lua->C bridging which is slow.              | ✔ Does not interact with Lua states at all.                                                                                                |
+| Usability   | ❌ Cannot use same-server FastDL for download.         | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
 
 ### Information
 
@@ -32,13 +31,22 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 
 > Example: `apakr_clone_directory "/fastdl/"` - If you use `Pterodactyl` or `WISP` and set up a mount path, you can have it directly copy the files to it. Thus using the full capabilities of FastDL if it is on the same machine.
 
-> You can change the encryption method if you want, you just need to ensure it's the same on the client & server. The logic is contained in `source/apakr/plugin/encryption.h`.
+`apakr_upload_url` - You can modify this to use your own data pack uploading & serving infrastructure.
 
-Please keep the credits in `source/apakr/plugin/shellcode.h`. Edit it with whatever you may need, but do not remove the credits.
+> AWS & Cloudflare are both used by default which have very little, if any, downtime. Caching is also used to speed up downloads for data packs (which are already very quick to download).
+
+> You can change the encryption method if you want, you just need to ensure they are exactly the same on the client & server. The logic is contained in `source/apakr/plugin/encryption.h`.
+
+Please keep the credits in `source/apakr/plugin/shellcode.h`.
 
 Data packs support up to 16.7 (`FFFFFF`) mega-byte lua files each. If you go over this limit, consider chunking the file.
-> This limit can be changed if necessary, however you will need to adjust the `PaddedHex` amount as well as the lua reader in the shellcode.
+> This limit can be changed, however you will need to adjust the `PaddedHex` amount as well as the lua parser in the shellcode.
 
 Please do not try and sell this or claim it as your own work. This isn't a big ask, just don't be malicious.
 
-This is heavily inspired by gluapack, however is very different.
+This is heavily inspired by gluapack, however is very different (and in my opinion, a lot better).
+
+## Infrastructure
+
+AWS - API Gateway (Request Router) -> Lambda (Request Processor) -> S3 (Storage) -> Cloudfront (Caching)
+Cloudflare - Caching & Protection
