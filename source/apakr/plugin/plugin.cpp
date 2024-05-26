@@ -10,6 +10,7 @@ ConVar *apakr_clone_directory = nullptr;
 ConVar *apakr_upload_url = nullptr;
 ConVar *sv_downloadurl = nullptr;
 bool DownloadURLChanged = false;
+bool LuaValue = false;
 std::string CurrentDownloadURL;
 
 void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloat)
@@ -109,6 +110,24 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
         return false;
     }
 
+    SourceSDK::FactoryLoader LuaSharedFactoryLoader("lua_shared");
+
+    if (!LuaSharedFactoryLoader.IsValid())
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mlua_shared\x1B[97m FactoryLoader!\n");
+
+        return false;
+    }
+
+    g_pILuaShared = LuaSharedFactoryLoader.GetInterface<GarrysMod::Lua::ILuaShared>(GMOD_LUASHARED_INTERFACE);
+
+    if (!g_pILuaShared)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mILuaShared\x1B[97m!\n");
+
+        return false;
+    }
+
     ConVar_Register();
 
     apakr_file = new ConVar("apakr_file", "", FCVAR_GAMEDLL | FCVAR_REPLICATED | FCVAR_LUA_SERVER);
@@ -137,6 +156,18 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
 void CApakrPlugin::Unload()
 {
+    Msg("\x1B[94m[Apakr]: \x1B[97mUnloading...\n");
+
+    sv_downloadurl->RemoveChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
+    apakr_clone_directory->RemoveChangeCallback((FnChangeCallback_t)OnCloneDirectoryChanged);
+    apakr_upload_url->RemoveChangeCallback((FnChangeCallback_t)OnUploadURLChanged);
+
+    if (g_pLUAServer)
+    {
+        g_pLUAServer->PushNil();
+        g_pLUAServer->SetField(GarrysMod::Lua::INDEX_GLOBAL, "APakr");
+    }
+
     ConVar_Unregister();
     GModDataPackProxy::Singleton.Unload();
 }
@@ -170,6 +201,19 @@ void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxC
 void CApakrPlugin::GameFrame(bool Simulating)
 {
     this->CheckForRepack();
+
+    if (!g_pLUAServer)
+        g_pLUAServer = g_pILuaShared->GetLuaInterface(GarrysMod::Lua::State::SERVER);
+
+    bool DesiredLuaValue = this->PackReady;
+
+    if (LuaValue != DesiredLuaValue && g_pLUAServer)
+    {
+        g_pLUAServer->PushBool(DesiredLuaValue);
+        g_pLUAServer->SetField(GarrysMod::Lua::INDEX_GLOBAL, "APakr");
+
+        LuaValue = DesiredLuaValue;
+    }
 
     if (this->Disabled)
         return;
@@ -639,6 +683,7 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
         INSTANCE->SetupDL(CurrentPath, CurrentFile);
 
         INSTANCE->Packing = false;
+        INSTANCE->PackReady = true;
 
         return;
     }
@@ -735,6 +780,7 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
     INSTANCE->SetupDL(Path, CurrentFile);
 
     INSTANCE->Packing = false;
+    INSTANCE->PackReady = true;
 }
 
 void CApakrPlugin::BuildAndWriteDataPack()
@@ -751,6 +797,7 @@ void CApakrPlugin::BuildAndWriteDataPack()
 #endif
 
     this->Packing = true;
+    this->PackReady = false;
 
     std::thread(BuildAndWriteDataPack_Thread, ClonePath, UploadURL).detach();
 }

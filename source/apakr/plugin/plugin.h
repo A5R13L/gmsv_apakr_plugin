@@ -1,5 +1,7 @@
 #include <GarrysMod/InterfacePointers.hpp>
 #include <GarrysMod/FunctionPointers.hpp>
+#include <GarrysMod/Lua/LuaInterface.h>
+#include <GarrysMod/FactoryLoader.hpp>
 #include <apakr/cnetworkstringtable.h>
 #include <GarrysMod/Lua/Interface.h>
 #include <apakr/plugin/encryption.h>
@@ -33,9 +35,51 @@
 
 #define BZ2_DEFAULT_BLOCKSIZE100k 9
 #define BZ2_DEFAULT_WORKFACTOR 0
+#define GMOD_LUASHARED_INTERFACE "LUASHARED003"
 
 using Time = std::chrono::system_clock::time_point;
 using _32CharArray = std::array<char, 32>;
+
+namespace GarrysMod
+{
+namespace Lua
+{
+class ILuaInterface;
+
+namespace State
+{
+enum
+{
+    CLIENT = 0,
+    SERVER,
+    MENU
+};
+} // namespace State
+
+class ILuaShared
+{
+  public:
+    virtual ~ILuaShared() = 0;
+    virtual void Init(void *(*)(const char *, int *), bool, CSteamAPIContext *, IGet *) = 0;
+    virtual void Shutdown() = 0;
+    virtual void DumpStats() = 0;
+    virtual ILuaInterface *CreateLuaInterface(unsigned char, bool) = 0;
+    virtual void CloseLuaInterface(ILuaInterface *) = 0;
+    virtual ILuaInterface *GetLuaInterface(unsigned char) = 0;
+    virtual void *LoadFile(const std::string &path, const std::string &pathId, bool fromDatatable, bool fromFile) = 0;
+    virtual void *GetCache(const std::string &);
+    virtual void MountLua(const char *) = 0;
+    virtual void MountLuaAdd(const char *, const char *) = 0;
+    virtual void UnMountLua(const char *) = 0;
+    virtual void SetFileContents(const char *, const char *) = 0;
+    virtual void SetLuaFindHook(void *) = 0;
+    virtual void FindScripts(const std::string &, const std::string &, std::vector<std::string> &) = 0;
+    virtual const char *GetStackTraces() = 0;
+    virtual void InvalidateCache(const std::string &) = 0;
+    virtual void EmptyCache() = 0;
+};
+} // namespace Lua
+} // namespace GarrysMod
 
 template <typename Return> inline Return TimeSince(Time When)
 {
@@ -103,6 +147,8 @@ class GModDataPack;
 inline CNetworkStringTableContainer *g_pNetworkStringTableContainer = nullptr;
 inline CNetworkStringTable *g_pClientLuaFiles = nullptr;
 inline CNetworkStringTable *g_pDownloadables = nullptr;
+inline GarrysMod::Lua::ILuaShared *g_pILuaShared = nullptr;
+inline GarrysMod::Lua::ILuaInterface *g_pLUAServer = nullptr;
 
 #if defined(APAKR_32_SERVER)
 inline IFileSystem *g_pFullFileSystem = nullptr;
@@ -183,6 +229,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     std::chrono::time_point<std::chrono::system_clock> LastRepack;
     std::vector<GmodPlayer *> Players;
     bool Ready = false;
+    bool PackReady = false;
     bool NeedsRepack = false;
     bool Packing = false;
     bool FailedUpload = false;
