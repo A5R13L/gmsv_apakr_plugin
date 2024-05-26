@@ -22,7 +22,7 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 | Connections | ❌ Blocks connections during pack build & upload.      | ✔ Connection is not blocked. `IClient::Reconnect` is used during build.                                                                                       |
 | Loading     | ❌ Kicks people who are loading in during pack build.  | ✔ Loading is as normal, when pack is rebuilt, `IClient::Reconnect` is called.                                                                     |
 | Reliability | ❌ Will turn off completely if health check fails.     | ✔ Seamless and does not require health checks.                                                                                             |
-| Performance | ❌ Uses C->Lua->C bridging which is slow.              | ✔ Does not interact with Lua states at all.                                                                                                |
+| Performance | ❌ Uses C->Lua->C bridging which is slow.              | ✔ Does not interact with Lua states besides setting a boolean.                                                                                                |
 | Usability   | ❌ Cannot use same-server FastDL for download.         | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
 
 ### Information
