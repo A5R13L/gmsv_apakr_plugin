@@ -685,14 +685,44 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
         apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
         Msg("\x1B[94m[Apakr]: \x1B[97mData pack is the same, skipping repack!\n");
 
-        if (!UploadURL.empty())
-            INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, CurrentPath, PreviousPacks);
-        else
-            INSTANCE->FailedUpload = false;
+        if (!ClonePath.empty())
+        {
+            std::filesystem::path FullPath = ClonePath + CurrentPath;
 
-        if (INSTANCE->FailedUpload)
-            return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, CurrentPath, PreviousPacks, 1)
-                .detach();
+            try
+            {
+                std::filesystem::create_directories(FullPath.parent_path());
+            }
+            catch (std::filesystem::filesystem_error &Error)
+            {
+            }
+
+            char FullPathBuffer[512];
+
+            if (g_pFullFileSystem->RelativePathToFullPath(CurrentPath.c_str(), "GAME", FullPathBuffer,
+                                                          sizeof(FullPathBuffer)))
+                try
+                {
+                    Msg("\x1B[94m[Apakr]: \x1B[97mCloning \x1B[93m%s \x1B[97mto \x1B[93m%s\x1B[97m.\n", FullPathBuffer,
+                        FullPath.c_str());
+
+                    std::filesystem::copy_file(FullPathBuffer, FullPath);
+                }
+                catch (std::filesystem::filesystem_error &Error)
+                {
+                }
+        }
+        else
+        {
+            if (!UploadURL.empty())
+                INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, CurrentPath, PreviousPacks);
+            else
+                INSTANCE->FailedUpload = false;
+
+            if (INSTANCE->FailedUpload)
+                return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, CurrentPath, PreviousPacks, 1)
+                    .detach();
+        }
 
         INSTANCE->SetupDL(CurrentPath, CurrentFile);
 
@@ -770,20 +800,22 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
             {
             }
     }
+    else
+    {
+        if (!UploadURL.empty())
+            INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks);
+        else
+            INSTANCE->FailedUpload = false;
+
+        if (INSTANCE->FailedUpload)
+            return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, Path, PreviousPacks, 1).detach();
+    }
 
     FileHandle_t Handle = g_pFullFileSystem->Open(Path.c_str(), "rb", "GAME");
 
     INSTANCE->PackedSize = g_pFullFileSystem->Size(Handle);
 
     g_pFullFileSystem->Close(Handle);
-
-    if (!UploadURL.empty())
-        INSTANCE->FailedUpload = !INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks);
-    else
-        INSTANCE->FailedUpload = false;
-
-    if (INSTANCE->FailedUpload)
-        return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, Path, PreviousPacks, 1).detach();
 
     Msg("\x1B[94m[Apakr]: \x1B[97mData pack is ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
         "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
