@@ -14,6 +14,7 @@
 #include <filesystem_base.h>
 #include <inetmsghandler.h>
 #include <Bootil/Bootil.h>
+#include <apakr/convar.h>
 #include <bzip2/bzlib.h>
 #include <igameevents.h>
 #include <inetchannel.h>

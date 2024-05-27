@@ -158,9 +158,15 @@ void CApakrPlugin::Unload()
 {
     Msg("\x1B[94m[Apakr]: \x1B[97mUnloading...\n");
 
+#if defined(APAKR_32_Server)
+    ((HackedConVar *)sv_downloadurl)->m_fnChangeCallback = nullptr;
+    ((HackedConVar *)apakr_clone_directory)->m_fnChangeCallback = nullptr;
+    ((HackedConVar *)apakr_upload_url)->m_fnChangeCallback = nullptr;
+#else
     sv_downloadurl->RemoveChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
     apakr_clone_directory->RemoveChangeCallback((FnChangeCallback_t)OnCloneDirectoryChanged);
     apakr_upload_url->RemoveChangeCallback((FnChangeCallback_t)OnUploadURLChanged);
+#endif
 
     if (g_pLUAServer)
     {
