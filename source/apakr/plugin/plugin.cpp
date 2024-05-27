@@ -242,12 +242,18 @@ void CApakrPlugin::ClientActive(edict_t *Entity)
 {
     int Index = Entity->m_EdictIndex - 1;
 
+    if (!this->Players[Index])
+        return;
+
     this->Players[Index]->LoadingIn = false;
 }
 
 void CApakrPlugin::ClientDisconnect(edict_t *Entity)
 {
     int Index = Entity->m_EdictIndex - 1;
+
+    if (!this->Players[Index])
+        return;
 
     this->Players[Index]->Client = nullptr;
 }
