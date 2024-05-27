@@ -158,7 +158,7 @@ void CApakrPlugin::Unload()
 {
     Msg("\x1B[94m[Apakr]: \x1B[97mUnloading...\n");
 
-#if defined(APAKR_32_Server)
+#if defined(APAKR_32_SERVER)
     ((HackedConVar *)sv_downloadurl)->m_fnChangeCallback = nullptr;
     ((HackedConVar *)apakr_clone_directory)->m_fnChangeCallback = nullptr;
     ((HackedConVar *)apakr_upload_url)->m_fnChangeCallback = nullptr;
