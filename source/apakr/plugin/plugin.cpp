@@ -143,11 +143,14 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
 
-    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
 
 #if defined(APAKR_32_SERVER)
+    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
+
     CurrentDownloadURL = sv_downloadurl->GetString();
 #else
+    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
+    
     CurrentDownloadURL = sv_downloadurl->Get<const char *>();
 #endif
 
