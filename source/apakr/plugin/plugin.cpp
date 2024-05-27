@@ -15,6 +15,9 @@ std::string CurrentDownloadURL;
 
 void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloat)
 {
+    if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
+        return;
+
     Msg("\x1B[94m[Apakr]: \x1B[97apakr_clone_directory was changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
@@ -22,6 +25,9 @@ void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloa
 
 void OnUploadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
 {
+    if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
+        return;
+
     Msg("\x1B[94m[Apakr]: \x1B[97apakr_upload_url was changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
@@ -29,7 +35,7 @@ void OnUploadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
 
 void OnDownloadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
 {
-    if (DownloadURLChanged)
+    if (DownloadURLChanged || !INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
     Msg("\x1B[94m[Apakr]: \x1B[97msv_downloadurl was changed. Issuing repack.\n");
@@ -143,14 +149,13 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
 
-
 #if defined(APAKR_32_SERVER)
     sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
 
     CurrentDownloadURL = sv_downloadurl->GetString();
 #else
     sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
-    
+
     CurrentDownloadURL = sv_downloadurl->Get<const char *>();
 #endif
 
