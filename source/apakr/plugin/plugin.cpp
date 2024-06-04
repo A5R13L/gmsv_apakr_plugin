@@ -18,7 +18,7 @@ void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloa
     if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97apakr_clone_directory was changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97aapakr_clone_directory \x1B[97mwas changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
 }
@@ -28,7 +28,7 @@ void OnUploadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
     if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97apakr_upload_url was changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97aapakr_upload_url \x1B[97mwas changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
 }
@@ -38,7 +38,7 @@ void OnDownloadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
     if (DownloadURLChanged || !INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97msv_downloadurl was changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97asv_downloadurl \x1B[97mwas changed. Issuing repack.\n");
 
 #if defined(APAKR_32_SERVER)
     CurrentDownloadURL = sv_downloadurl->GetString();
