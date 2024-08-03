@@ -234,7 +234,7 @@ void CApakrPlugin::GameFrame(bool Simulating)
 
     if (this->Packing)
         for (GmodPlayer *Player : this->Players)
-            if (Player && Player->Client && Player->LoadingIn)
+            if (Player && Player->Client && Player->LoadingIn && Player->Client->IsConnected())
                 Player->Client->Reconnect();
 }
 
