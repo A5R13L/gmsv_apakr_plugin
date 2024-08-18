@@ -183,7 +183,7 @@ inline std::string GetIPAddress()
         return "";
 
 #if defined(APAKR_32_SERVER)
-    return ip->GetString()
+    return ip->GetString();
 #else
     return ip->Get<const char *>();
 #endif
