@@ -487,9 +487,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
     }
 
     CURL *Handle = curl_easy_init();
-    std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
-
-    ServerIP = ServerIP.substr(0, ServerIP.find(":"));
+    std::string ServerIP = GetIPAddress();
 
     if (Handle)
     {
@@ -599,13 +597,12 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
 
     if (Handle)
     {
-        std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+        std::string ServerIP = GetIPAddress();
         curl_slist *Headers = nullptr;
         char ErrorBuffer[CURL_ERROR_SIZE];
         long HTTPCode;
         CURLcode ResponseCode;
 
-        ServerIP = ServerIP.substr(0, ServerIP.find(":"));
         Headers = curl_slist_append(Headers, "User-Agent: Half-Life 2");
         DownloadURL += "data/apakr/" + this->CurrentPackName + ".bsp.bz2";
         LastHTTPResponse = "";
