@@ -535,6 +535,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         curl_easy_setopt(Handle, CURLOPT_XFERINFODATA, nullptr);
         curl_easy_setopt(Handle, CURLOPT_HEADERFUNCTION, HeaderCallback);
         curl_easy_setopt(Handle, CURLOPT_HEADERDATA, &ResponseHeaders);
+        curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
         ResponseCode = curl_easy_perform(Handle);
 
@@ -605,6 +606,7 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer);
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(Handle, CURLOPT_WRITEDATA, nullptr);
+        curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
         ResponseCode = curl_easy_perform(Handle);
 
