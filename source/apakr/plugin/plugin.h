@@ -193,8 +193,8 @@ inline bool IsBridgedInterface()
 {
     static std::string IPAddress = GetIPAddress();
 
-    return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(1, 4) != "127." &&
-           IPAddress.substr(1, 4) != "192.";
+    return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(0, 3) != "10." &&
+           IPAddress.substr(0, 4) != "172." && IPAddress.substr(0, 4) != "192.";
 }
 
 class GModDataPack;
