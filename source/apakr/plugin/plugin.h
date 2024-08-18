@@ -144,6 +144,21 @@ inline double PercentageDifference(double UnpackedSize, double PackedSize)
     return ((PackedSize - UnpackedSize) / UnpackedSize) * 100;
 }
 
+inline std::string Exec(const char *Command)
+{
+    std::array<char, 128> Buffer;
+    std::string Output;
+    std::unique_ptr<FILE, decltype(&pclose)> Pipe(popen(Command, "r"), pclose);
+
+    if (!Pipe)
+        return "";
+
+    while (fgets(Buffer.data(), Buffer.size(), Pipe.get()))
+        Output += Buffer.data();
+
+    return Output;
+}
+
 class GModDataPack;
 inline CNetworkStringTableContainer *g_pNetworkStringTableContainer = nullptr;
 inline CNetworkStringTable *g_pClientLuaFiles = nullptr;
