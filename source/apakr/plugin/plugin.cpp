@@ -3,6 +3,13 @@
 static CApakrPlugin *INSTANCE = new CApakrPlugin();
 GModDataPackProxy GModDataPackProxy::Singleton;
 
+IServer *g_pServer = nullptr;
+IVEngineServer *g_pVEngineServer = nullptr;
+CNetworkStringTableContainer *g_pNetworkStringTableContainer = nullptr;
+CNetworkStringTable *g_pClientLuaFiles = nullptr;
+CNetworkStringTable *g_pDownloadables = nullptr;
+GarrysMod::Lua::ILuaShared *g_pILuaShared = nullptr;
+GarrysMod::Lua::ILuaInterface *g_pLUAServer = nullptr;
 ConVar *apakr_file = nullptr;
 ConVar *apakr_sha256 = nullptr;
 ConVar *apakr_key = nullptr;
@@ -536,7 +543,9 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         curl_easy_setopt(Handle, CURLOPT_HEADERFUNCTION, HeaderCallback);
         curl_easy_setopt(Handle, CURLOPT_HEADERDATA, &ResponseHeaders);
         curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
+
+        if (IsBridgedInterface())
+            curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
 
         ResponseCode = curl_easy_perform(Handle);
 
@@ -610,7 +619,9 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteCallback);
         curl_easy_setopt(Handle, CURLOPT_WRITEDATA, nullptr);
         curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-        curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
+
+        if (IsBridgedInterface())
+            curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
 
         ResponseCode = curl_easy_perform(Handle);
 

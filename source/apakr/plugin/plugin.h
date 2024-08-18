@@ -3,6 +3,7 @@
 #include <GarrysMod/Lua/LuaInterface.h>
 #include <GarrysMod/FactoryLoader.hpp>
 #include <apakr/cnetworkstringtable.h>
+#include <GarrysMod/ModuleLoader.hpp>
 #include <GarrysMod/Lua/Interface.h>
 #include <apakr/plugin/encryption.h>
 #include <../utils/lzma/C/LzmaLib.h>
@@ -15,17 +16,22 @@
 #include <inetmsghandler.h>
 #include <Bootil/Bootil.h>
 #include <apakr/convar.h>
+#include <tier1/netadr.h>
 #include <bzip2/bzlib.h>
 #include <igameevents.h>
 #include <inetchannel.h>
+#include <sys/socket.h>
 #include <curl/curl.h>
+#include <arpa/inet.h>
 #include <filesystem>
 #include <pthread.h>
 #include <iserver.h>
 #include <iclient.h>
 #include <convar.h>
+#include <unistd.h>
 #include <eiface.h>
 #include <iomanip>
+#include <netdb.h>
 #include <random>
 #include <thread>
 #include <map>
@@ -40,6 +46,8 @@
 
 using Time = std::chrono::system_clock::time_point;
 using _32CharArray = std::array<char, 32>;
+
+netadr_t LocalAddress;
 
 namespace GarrysMod
 {
@@ -81,6 +89,14 @@ class ILuaShared
 };
 } // namespace Lua
 } // namespace GarrysMod
+
+extern IServer *g_pServer;
+extern IVEngineServer *g_pVEngineServer;
+extern CNetworkStringTableContainer *g_pNetworkStringTableContainer;
+extern CNetworkStringTable *g_pClientLuaFiles;
+extern CNetworkStringTable *g_pDownloadables;
+extern GarrysMod::Lua::ILuaShared *g_pILuaShared;
+extern GarrysMod::Lua::ILuaInterface *g_pLUAServer;
 
 template <typename Return> inline Return TimeSince(Time When)
 {
@@ -159,20 +175,33 @@ inline std::string Exec(const char *Command)
     return Output;
 }
 
+inline std::string GetIPAddress()
+{
+    static ConVar *ip = g_pCVar->FindVar("ip");
+
+    if (!ip)
+        return "";
+
+#if defined(APAKR_32_SERVER)
+    return ip->GetString()
+#else
+    return ip->Get<const char *>();
+#endif
+}
+
+inline bool IsBridgedInterface()
+{
+    static std::string IPAddress = GetIPAddress();
+
+    return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(1, 4) != "127." &&
+           IPAddress.substr(1, 4) != "192.";
+}
+
 class GModDataPack;
-inline CNetworkStringTableContainer *g_pNetworkStringTableContainer = nullptr;
-inline CNetworkStringTable *g_pClientLuaFiles = nullptr;
-inline CNetworkStringTable *g_pDownloadables = nullptr;
-inline GarrysMod::Lua::ILuaShared *g_pILuaShared = nullptr;
-inline GarrysMod::Lua::ILuaInterface *g_pLUAServer = nullptr;
 
 #if defined(APAKR_32_SERVER)
 inline IFileSystem *g_pFullFileSystem = nullptr;
 #endif
-
-inline IServer *g_pServer = nullptr;
-inline IVEngineServer *g_pVEngineServer = nullptr;
-inline ICvar *g_pConVars = nullptr;
 
 struct GmodDataPackFile
 {
