@@ -544,7 +544,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         curl_easy_setopt(Handle, CURLOPT_HEADERDATA, &ResponseHeaders);
         curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
-        if (IsViableInterfaceIP())
+        if (IsBridgedInterface())
             curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
 
         ResponseCode = curl_easy_perform(Handle);
@@ -599,11 +599,11 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
 
     if (Handle)
     {
-        std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
-        curl_slist *Headers = nullptr;
-        char ErrorBuffer[CURL_ERROR_SIZE];
         long HTTPCode;
         CURLcode ResponseCode;
+        curl_slist *Headers = nullptr;
+        char ErrorBuffer[CURL_ERROR_SIZE];
+        std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
 
         ServerIP = ServerIP.substr(0, ServerIP.find(":"));
         Headers = curl_slist_append(Headers, "User-Agent: Half-Life 2");
@@ -620,7 +620,7 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
         curl_easy_setopt(Handle, CURLOPT_WRITEDATA, nullptr);
         curl_easy_setopt(Handle, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
 
-        if (IsViableInterfaceIP())
+        if (IsBridgedInterface())
             curl_easy_setopt(Handle, CURLOPT_INTERFACE, ServerIP.c_str());
 
         ResponseCode = curl_easy_perform(Handle);
