@@ -9,9 +9,11 @@ ConVar *apakr_key = nullptr;
 ConVar *apakr_clone_directory = nullptr;
 ConVar *apakr_upload_url = nullptr;
 ConVar *sv_downloadurl = nullptr;
+ConVar *sv_setsteamaccount = nullptr;
 bool DownloadURLChanged = false;
 bool LuaValue = false;
 std::string CurrentDownloadURL;
+std::string CurrentGSLT;
 
 void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloat)
 {
@@ -149,15 +151,22 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
 
+    sv_setsteamaccount = g_pCVar->FindVar("sv_setsteamaccount");
+
 #if defined(APAKR_32_SERVER)
     sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
 
     CurrentDownloadURL = sv_downloadurl->GetString();
+    CurrentGSLT = sv_setsteamaccount->GetString();
 #else
     sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
 
     CurrentDownloadURL = sv_downloadurl->Get<const char *>();
+    CurrentGSLT = sv_setsteamaccount->Get<const char *>();
 #endif
+
+    if (CurrentGSLT == "")
+        CurrentGSLT = "NOT SET";
 
     return GModDataPackProxy::Singleton.Load();
 }
@@ -402,6 +411,7 @@ void CApakrPlugin::SetupClientFiles()
 
 int BarSize = 40;
 double LastPercentage = -1;
+std::string LastHTTPResponse = "";
 
 void DisplayProgressBar(double Percentage)
 {
@@ -433,7 +443,9 @@ int ProgressCallback(void *, curl_off_t, curl_off_t, curl_off_t TotalToUpload, c
 
 size_t WriteCallback(void *Pointer, size_t Size, size_t Bytes, void *Stream)
 {
-    return fwrite(Pointer, Size, Bytes, (FILE *)Stream);
+    LastHTTPResponse.append((char *)Pointer, Size * Bytes);
+
+    return Size * Bytes;
 }
 
 size_t WriteEmptyCallback(void *Pointer, size_t Size, size_t Bytes, void *Stream)
@@ -476,12 +488,14 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
 
     CURL *Handle = curl_easy_init();
     std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+    std::string Secret = "";
 
     ServerIP = ServerIP.substr(0, ServerIP.find(":"));
 
     if (Handle)
     {
         std::string AuthorizationHeader = "Authorization: ";
+        std::string SecretHeader = "Secret: ";
         std::string DownloadURLHeader = "X-Download-URL: ";
         curl_slist *Headers = nullptr;
         FILE *HTTPUploadLog = nullptr;
@@ -493,9 +507,12 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         std::map<std::string, std::string> ResponseHeaders;
 
         LastPercentage = -1;
+        LastHTTPResponse = "";
         AuthorizationHeader += GModDataPackProxy::Singleton.GetHexSHA256(ServerIP);
+        SecretHeader += GModDataPackProxy::Singleton.GetHexSHA256(CurrentGSLT).substr(0, 6);
         DownloadURLHeader += CurrentDownloadURL;
         Headers = curl_slist_append(Headers, AuthorizationHeader.c_str());
+        Headers = curl_slist_append(Headers, SecretHeader.c_str());
         Headers = curl_slist_append(Headers, DownloadURLHeader.c_str());
         Headers = curl_slist_append(Headers, "User-Agent: apakr_server");
 
@@ -519,15 +536,13 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         curl_mime_name(Field, "delete");
         curl_mime_data(Field, DeletionRequest.c_str(), CURL_ZERO_TERMINATED);
 
-        HTTPUploadLog = fopen("apakr_http_upload.log", "wb");
-
         curl_easy_setopt(Handle, CURLOPT_URL, UploadURL.c_str());
         curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
         curl_easy_setopt(Handle, CURLOPT_MIMEPOST, Form);
         curl_easy_setopt(Handle, CURLOPT_NOPROGRESS, 0);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer);
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteCallback);
-        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, HTTPUploadLog);
+        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, nullptr);
         curl_easy_setopt(Handle, CURLOPT_XFERINFOFUNCTION, ProgressCallback);
         curl_easy_setopt(Handle, CURLOPT_XFERINFODATA, nullptr);
         curl_easy_setopt(Handle, CURLOPT_HEADERFUNCTION, HeaderCallback);
@@ -550,6 +565,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         if (HTTPCode != 200)
         {
             Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while uploading.\n", HTTPCode);
+            Msg("\x1Bp94m[Apakr]: \x1b[97mBody: %s\n", LastHTTPResponse);
 
             return false;
         }
@@ -591,6 +607,7 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
 
         Headers = curl_slist_append(Headers, "User-Agent: Half-Life 2");
         DownloadURL += "data/apakr/" + this->CurrentPackName + ".bsp.bz2";
+        LastHTTPResponse = "";
 
         curl_easy_setopt(Handle, CURLOPT_URL, DownloadURL.c_str());
         curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
@@ -598,6 +615,8 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
         curl_easy_setopt(Handle, CURLOPT_FOLLOWLOCATION, 1);
         curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteEmptyCallback);
         curl_easy_setopt(Handle, CURLOPT_ERRORBUFFER, ErrorBuffer);
+        curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, nullptr);
 
         ResponseCode = curl_easy_perform(Handle);
 
@@ -617,6 +636,8 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
             Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while checking if data pack is "
                 "downloadable.\n",
                 HTTPCode);
+
+            Msg("\x1Bp94m[Apakr]: \x1b[97mBody: %s\n", LastHTTPResponse);
 
             return false;
         }
