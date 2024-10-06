@@ -1259,7 +1259,6 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
     std::string Contents = GModDataPackProxy::Singleton.Decompress(Compressed.data(), Length);
 
     ReplaceAll(Contents, "\r", "");
-
     GModDataPackProxy::Singleton.ProcessFile(Contents);
 
     std::vector<char> CompressedContents = GModDataPackProxy::Singleton.Compress(Contents);
