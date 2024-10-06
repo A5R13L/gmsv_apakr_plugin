@@ -52,7 +52,7 @@ Preprocessors are essentially macros you control, you can use them to write cust
 
 This feature works with auto-refreshes on both the server & client.
 
-To use them, simply create a `apakr.templates` in the `garrysmod` directory of the server (commonly `/home/container/garrysmod`).
+To use them, simply create an `apakr.templates` file in the `garrysmod` directory of the server (commonly `/home/container/garrysmod`).
 
 They are `JSON` format, and should be an array of objects containing a `Pattern` regex and `Replacement` regex.
 
