@@ -1258,12 +1258,14 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
 
     std::string Contents = GModDataPackProxy::Singleton.Decompress(Compressed.data(), Length);
 
+    if (Contents == "")
+        return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
+
     ReplaceAll(Contents, "\r", "");
     GModDataPackProxy::Singleton.ProcessFile(Contents);
 
     std::vector<char> CompressedContents = GModDataPackProxy::Singleton.Compress(Contents);
     _32CharArray SHA256 = GModDataPackProxy::Singleton.GetSHA256(Contents.data(), Contents.length() + 1);
-
     void *BF_Data_New = malloc(65536);
     bf_write Writer(BF_Data_New, 65536);
 
