@@ -46,6 +46,60 @@ Please do not try and sell this or claim it as your own work. This isn't a big a
 
 This is heavily inspired by gluapack, however is very different (and in my opinion, a lot better).
 
+## Preprocessors
+
+Preprocessors are essentially macros you control, you can use them to write custom syntax, have helper-esque calls, and much more.
+
+This feature works with auto-refreshes on both the server & client.
+
+To use them, simply create a `apakr.templates` in the `garrysmod` directory of the server (commonly `/home/container/garrysmod`).
+
+They are `JSON` format, and should be an array of objects containing a `Pattern` regex and `Replacement` regex.
+
+An example of how they can be used is below:
+
+```json
+[
+    {
+        "Pattern": "local (\\w+): (\\w+) = (.+)",
+        "Replacement": "local $1 = $3\nassert(type($1) == \"$2\", \"$1 is not a $2\")"
+    },
+    {
+        "Pattern": "-MACRO CHECK-\\(\\)",
+        "Replacement": "print('omg it works!')"
+    },
+    {
+        "Pattern": "case\\s+\"([^\"]+)\"\\s*: \\s*\\{([^}]*)\\}",
+        "Replacement": "if case(\"$1\") then\n    $2\nend\n"
+    },
+    {
+        "Pattern": "switch\\(([^)]*)\\)\\s*\\{([^}]*)\\s*\\}",
+        "Replacement": "switch($1)\n$2"
+    }
+]
+```
+
+This set of preprocessors allow a rudimentary way to do type checking, switch formats, and case formats.
+
+You can also use them to implement optional chaining (`a?.b?.c?.d`) and much more.
+
+```lua
+switch(value) {
+      case "apple": {
+
+      }
+}
+```
+
+turns into
+
+```lua
+switch(value)
+if case("apple") then
+
+end
+```
+
 ## Infrastructure
 
 AWS - API Gateway (Request Router) -> Lambda (Request Processor) -> S3 (Storage) -> Cloudfront (Caching)
