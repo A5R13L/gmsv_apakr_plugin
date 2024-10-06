@@ -90,8 +90,6 @@ DataPackEntry::DataPackEntry(std::string _Path, std::string _String, std::string
     this->OriginalSize = this->OriginalString.size() + 1;
     this->SHA256 = GModDataPackProxy::Singleton.GetSHA256(this->String.data(), this->Size);
     this->Compressed = GModDataPackProxy::Singleton.Compress(this->String);
-
-    GModDataPackProxy::Singleton.Decompress(this->Compressed.data(), this->Compressed.size());
 }
 
 FileEntry::FileEntry(std::string _Contents, int _Size)
@@ -441,7 +439,6 @@ void CApakrPlugin::SetupClientFiles()
 
             if (!DataPackMapEntry.Compressed.empty())
             {
-
                 DataPackMapEntry.OriginalString = FileMapEntry.Contents;
                 DataPackMapEntry.OriginalSize = DataPackMapEntry.OriginalString.size() + 1;
 
@@ -540,8 +537,6 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
 
     char FullPath[MAX_PATH];
 
-    std::cout << "PACK = " << Pack.c_str() << std::endl;
-
     if (!g_pFullFileSystem->RelativePathToFullPath_safe(Pack.c_str(), "GAME", FullPath))
     {
         Msg("\x1B[94m[Apakr]: \x1b[97Failed to get full file path while uploading.\n");
@@ -551,8 +546,6 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
 
     CURL *Handle = curl_easy_init();
     std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
-
-    std::cout << "ServerIP = " << ServerIP.c_str() << std::endl;
 
     ServerIP = ServerIP.substr(0, ServerIP.find(":"));
 
@@ -1252,20 +1245,40 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
         return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
 
     std::string Path = Buffer.ReadAndAllocateString();
-    unsigned int Length = Buffer.ReadUBitLong(32);
+    unsigned int Length = Buffer.ReadLong();
 
-    if (Length <= 0)
+    if (Length <= 32)
         return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
 
-    std::vector<char> CompressedBuffer(Length, 0);
+    Length = Length - 32;
 
-    Buffer.ReadBytes((char *)CompressedBuffer.data(), Length);
+    std::vector<char> Compressed(Length, 0);
 
-    std::cout << CompressedBuffer.size() << " | " << CompressedBuffer.data() << std::endl;
+    Buffer.SeekRelative(32 << 3);
+    Buffer.ReadBytes((void *)Compressed.data(), Length);
 
-    // std::string Contents = GModDataPackProxy::Singleton.Decompress(CompressedBuffer.data(), Length);
+    std::string Contents = GModDataPackProxy::Singleton.Decompress(Compressed.data(), Length);
 
-    // std::cout << Contents.length() << " | " << Contents.data() << std::endl;
+    ReplaceAll(Contents, "\r", "");
+
+    GModDataPackProxy::Singleton.ProcessFile(Contents);
+
+    std::vector<char> CompressedContents = GModDataPackProxy::Singleton.Compress(Contents);
+    _32CharArray SHA256 = GModDataPackProxy::Singleton.GetSHA256(Contents.data(), Contents.length() + 1);
+
+    void *BF_Data_New = malloc(65536);
+    bf_write Writer(BF_Data_New, 65536);
+
+    Writer.WriteByte(1);
+    Writer.WriteString(Path.data());
+    Writer.WriteLong(SHA256.size() + CompressedContents.size());
+    Writer.WriteBytes(SHA256.data(), SHA256.size());
+    Writer.WriteBytes(CompressedContents.data(), CompressedContents.size());
+
+    if (!Writer.IsOverflowed())
+        Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data_New, Writer.GetNumBitsWritten());
+
+    free(BF_Data_New);
 }
 
 extern "C"
