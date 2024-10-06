@@ -10,6 +10,7 @@ CreateWorkspace({name = "apakr_64", abi_compatible = false, path = "projects/x64
 		IncludeSDKTier0()
 		IncludeSDKTier1()
 		IncludeDetouring()
+		IncludeScanning()
 		files({
 			"source/**/*.*",
 			"source/**/*.*",
@@ -25,6 +26,7 @@ CreateWorkspace({name = "apakr_32", abi_compatible = false, path = "projects/x32
 		IncludeSDKTier0()
 		IncludeSDKTier1()
 		IncludeDetouring()
+		IncludeScanning()
 		files({
 			"source/**/*.*",
 			"source/**/*.*",
