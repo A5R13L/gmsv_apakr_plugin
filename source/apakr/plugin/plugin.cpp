@@ -1238,7 +1238,6 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
 {
     auto &Self = this->Singleton;
     bf_read Buffer(BF_Data, BF_Size);
-
     int Type = Buffer.ReadByte();
 
     if (Type != 1)
