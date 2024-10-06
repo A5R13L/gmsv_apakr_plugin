@@ -7,12 +7,15 @@
 #include <GarrysMod/Lua/Interface.h>
 #include <apakr/plugin/encryption.h>
 #include <../utils/lzma/C/LzmaLib.h>
+#include <scanning/symbolfinder.hpp>
 #include <detouring/classproxy.hpp>
 #include <../utils/lzma/C/Sha256.h>
 #include <apakr/plugin/shellcode.h>
 #include <engine/iserverplugin.h>
 #include <GarrysMod/Symbol.hpp>
 #include <filesystem_base.h>
+#include <recipientfilter.h>
+#include <nlohmann/json.hpp>
 #include <inetmsghandler.h>
 #include <Bootil/Bootil.h>
 #include <apakr/convar.h>
@@ -24,6 +27,7 @@
 #include <curl/curl.h>
 #include <arpa/inet.h>
 #include <filesystem>
+#include <lauxlib.h>
 #include <pthread.h>
 #include <iserver.h>
 #include <iclient.h>
@@ -34,6 +38,7 @@
 #include <netdb.h>
 #include <random>
 #include <thread>
+#include <regex>
 #include <map>
 
 #ifndef FCVAR_LUA_SERVER
@@ -48,6 +53,12 @@ using Time = std::chrono::system_clock::time_point;
 using _32CharArray = std::array<char, 32>;
 
 netadr_t LocalAddress;
+
+struct Template
+{
+    std::string Pattern;
+    std::string Replacement;
+};
 
 namespace GarrysMod
 {
@@ -160,21 +171,6 @@ inline double PercentageDifference(double UnpackedSize, double PackedSize)
     return ((PackedSize - UnpackedSize) / UnpackedSize) * 100;
 }
 
-inline std::string Exec(const char *Command)
-{
-    std::array<char, 128> Buffer;
-    std::string Output;
-    std::unique_ptr<FILE, decltype(&pclose)> Pipe(popen(Command, "r"), pclose);
-
-    if (!Pipe)
-        return "";
-
-    while (fgets(Buffer.data(), Buffer.size(), Pipe.get()))
-        Output += Buffer.data();
-
-    return Output;
-}
-
 inline std::string GetIPAddress()
 {
     static ConVar *ip = g_pCVar->FindVar("ip");
@@ -195,6 +191,145 @@ inline bool IsBridgedInterface()
 
     return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(0, 3) != "10." &&
            IPAddress.substr(0, 4) != "172." && IPAddress.substr(0, 4) != "192.";
+}
+
+inline std::vector<Template> LoadTemplates()
+{
+    std::vector<Template> Output;
+    char FullPath[MAX_PATH];
+
+    if (!g_pFullFileSystem->RelativePathToFullPath_safe("apakr.templates", nullptr, FullPath))
+    {
+        Msg("\x1B[94m[Apakr]: \x1b[97mFailed to get full file path while processing file.\n");
+
+        return Output;
+    }
+
+    if (!std::filesystem::exists(FullPath))
+        return Output;
+
+    std::ifstream File(FullPath);
+    nlohmann::json Object;
+
+    try
+    {
+        File >> Object;
+
+        for (const auto &Rule : Object)
+            Output.push_back({Rule["Pattern"], Rule["Replacement"]});
+    }
+    catch (nlohmann::json::parse_error &_)
+    {
+        Msg("\x1B[94m[Apakr]: \x1b[97mapakr_templates.cfg is invalid.\n");
+
+        return {};
+    }
+
+    return Output;
+}
+
+static SymbolFinder Finder;
+
+template <class T> inline T ResolveSymbol(SourceSDK::FactoryLoader &Loader, const Symbol &Symbol)
+{
+    if (Symbol.type == Symbol::Type::None)
+        return nullptr;
+
+    auto Pointer = (uint8_t *)(Finder.Resolve(Loader.GetModule(), Symbol.name.c_str(), Symbol.length, nullptr));
+
+    if (Pointer)
+        Pointer += Symbol.offset;
+
+    return reinterpret_cast<T>(Pointer);
+}
+
+template <class T> inline T ResolveSymbols(SourceSDK::FactoryLoader &Loader, const std::vector<Symbol> &Symbols)
+{
+    for (const auto &Symbol : Symbols)
+    {
+        T Return = ResolveSymbol<T>(Loader, Symbol);
+
+        if (Return)
+            return Return;
+    }
+
+    return nullptr;
+}
+
+inline bool PropsAreValid(const unsigned char *pProps)
+{
+    if (pProps[0] >= (9 * 5 * 5))
+    {
+        return false;
+    }
+
+    // LZMA_DIC_MIN
+    unsigned int dicSize =
+        pProps[1] | ((unsigned int)pProps[2] << 8) | ((unsigned int)pProps[3] << 16) | ((unsigned int)pProps[4] << 24);
+
+    if (dicSize < (1 << 12))
+    {
+        return false;
+    }
+
+    return true;
+}
+
+inline bool LZMA_Extract(const void *pData, unsigned int iLength, Bootil::Buffer &output)
+{
+    const unsigned char *pPropsBuf = (unsigned char *)pData;
+    const unsigned char *pSizeBuf = pPropsBuf + LZMA_PROPS_SIZE;
+    const unsigned char *pDataBuf = pSizeBuf + 8;
+
+    //
+    // Verify that the buffer contains what we're looking for..
+    //
+    if (iLength <= LZMA_PROPS_SIZE + 8)
+    {
+        return false;
+    }
+
+    if (!PropsAreValid(pPropsBuf))
+    {
+        return false;
+    }
+
+    //
+    // Work out the dest length from the header
+    //
+    size_t iDestLen = pSizeBuf[0] | (pSizeBuf[1] << 8) | (pSizeBuf[2] << 16) | (pSizeBuf[3] << 24);
+    size_t iRealDestLen = iDestLen;
+
+    //
+    // TODO: Santity check?
+    //
+
+    //
+    // Make sure we can accommodate this extracted size
+    //
+    if (!output.EnsureCapacity(output.GetPos() + iDestLen))
+    {
+        return false;
+    }
+
+    //
+    // Do extraction
+    //
+    size_t srcLen = iLength - LZMA_PROPS_SIZE - 8;
+    int res =
+        LzmaUncompress((unsigned char *)output.GetCurrent(), &iDestLen, pDataBuf, &srcLen, pPropsBuf, LZMA_PROPS_SIZE);
+
+    if (res != SZ_OK)
+    {
+        return false;
+    }
+
+    //
+    // Update buffers with new positions
+    //
+    output.SetWritten(output.GetPos() + iRealDestLen);
+    output.SetPos(output.GetPos() + iRealDestLen);
+    return true;
 }
 
 class GModDataPack;
@@ -351,11 +486,31 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     std::string SHA256ToHex(_32CharArray SHA256);
     std::vector<char> Compress(char *Input, int Size);
     std::vector<char> Compress(std::string &Input);
+    std::string Decompress(char *Input, int Size);
     std::vector<char> BZ2(char *Input, int Size);
+    void ProcessFile(std::string &Code);
     void SendDataPackFile(int Client, int FileID);
     void SendFileToClient(int Client, int FileID);
 
   private:
     FunctionPointers::GModDataPack_AddOrUpdateFile_t AddOrUpdateFile_Original;
     FunctionPointers::GModDataPack_SendFileToClient_t SendFileToClient_Original;
+};
+
+typedef void (*IVEngineServer_GMOD_SendFileToClient_t)(IVEngineServer *, IRecipientFilter *, void *, int);
+
+class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngineServerProxy>
+{
+  public:
+    static IVEngineServerProxy Singleton;
+
+    IVEngineServerProxy(){};
+    ~IVEngineServerProxy(){};
+
+    bool Load();
+    void Unload();
+    void GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
+
+  private:
+    IVEngineServer_GMOD_SendFileToClient_t GMOD_SendFileToClient_Original;
 };

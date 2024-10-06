@@ -33,7 +33,7 @@ public:
 	// Retrieve value
 	FORCEINLINE_CVAR float			GetFloat( void ) const;
 	FORCEINLINE_CVAR int			GetInt( void ) const;
-	FORCEINLINE_CVAR bool			GetBool() const {  return !!GetInt(); }
+	FORCEINLINE_CVAR bool			GetBool() const;
 	FORCEINLINE_CVAR char const	   *GetString( void ) const;
 
 	// Any function that allocates/frees memory needs to be virtual or else you'll have crashes
