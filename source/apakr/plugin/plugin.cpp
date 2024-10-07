@@ -233,6 +233,7 @@ void CApakrPlugin::Unload()
 
     ConVar_Unregister();
     GModDataPackProxy::Singleton.Unload();
+    IVEngineServerProxy::Singleton.Unload();
 }
 
 void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxClients)
