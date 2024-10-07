@@ -522,6 +522,21 @@ size_t HeaderCallback(char *Buffer, size_t Size, size_t Items, std::map<std::str
     return Size * Items;
 }
 
+void WaitForSteam_Thread()
+{
+    std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+
+    ServerIP = ServerIP.substr(0, ServerIP.find(":"));
+
+    while (ServerIP == "0.0.0.0")
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+        ServerIP = ServerIP.substr(0, ServerIP.find(":"));
+    }
+}
+
 bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std::vector<std::string> &PreviousPacks)
 {
     Msg("\x1B[94m[Apakr]: \x1b[97mUploading data pack...\n");
@@ -533,7 +548,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
 
     if (!g_pFullFileSystem->RelativePathToFullPath_safe(Pack.c_str(), "GAME", FullPath))
     {
-        Msg("\x1B[94m[Apakr]: \x1b[97Failed to get full file path while uploading.\n");
+        Msg("\x1B[94m[Apakr]: \x1b[97mFailed to get full file path while uploading.\n");
 
         return false;
     }
@@ -542,6 +557,13 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
     std::string ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
 
     ServerIP = ServerIP.substr(0, ServerIP.find(":"));
+
+    if (ServerIP == "0.0.0.0")
+    {
+        Msg("\x1B[94m[Apakr]: \x1b[97mNot connected to steam. Waiting...\n");
+
+        std::thread(WaitForSteam_Thread).join();
+    }
 
     if (Handle)
     {
@@ -616,7 +638,6 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         {
             Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while uploading.\n", HTTPCode);
             Msg("\x1B[94m[Apakr]: \x1b[97mBody: %s\n", LastHTTPResponse.data());
-            Msg("\x1B[94m[Apakr]: \x1b[97mIP: %s\n", g_pVEngineServer->GMOD_GetServerAddress());
 
             return false;
         }
