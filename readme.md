@@ -16,14 +16,13 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 
 ### Differences
 
-| What        | gluapack                                               | apakr                                                                                               |
-| ----------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Server Lag  | ❌ During auto refresh & pack building.                | ✔ No lag due to multi-threading.                                                                                    |
-| Connections | ❌ Blocks connections during pack build & upload.      | ✔ Connection is not blocked. `IClient::Reconnect` is used during build.                                                                                       |
-| Loading     | ❌ Kicks people who are loading in during pack build.  | ✔ Loading is as normal, when pack is rebuilt, `IClient::Reconnect` is called.                                                                     |
-| Reliability | ❌ Will turn off completely if health check fails.     | ✔ Seamless and does not require health checks.                                                                                             |
-| Performance | ❌ Uses C->Lua->C bridging which is slow.              | ✔ Does not interact with Lua states besides setting a boolean.                                                                                                |
-| Usability   | ❌ Cannot use same-server FastDL for download.         | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
+| What          | gluapack                                                     | apakr                                                                                               |
+| ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Usability     | ❌ Cannot use same-server FastDL for download.               | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
+| DRM           | ❌ Uses DRM, is fully closed source, and cannot be modified. | ✔ No DRM, fully open source, and can be modified in any way you want. |
+| Auto Refresh  | ❌ Does not rebuild the pack during refreshes, causing new clients being forced to use vanilla networking for those files. | ✔ Rebuilds the pack on refreshes, allowing new clients to load in just as fast as others. |
+| File Size     | ❌ Does not allow files bigger than `64.4`kb.                | ✔ Allows files up to `16.7`mb with the ability to be increased. |
+| Preprocessors | ❌ Does not have any capacity of preprocessors.              | ✔ Has preprocessor support with user-defined templates. |
 
 ### Information
 
@@ -52,7 +51,7 @@ Preprocessors are essentially macros you control, you can use them to write cust
 
 This feature works with auto-refreshes on both the server & client.
 
-To use them, simply create a `apakr.templates` in the `garrysmod` directory of the server (commonly `/home/container/garrysmod`).
+To use them, simply create an `apakr.templates` file in the `garrysmod` directory of the server (commonly `/home/container/garrysmod`).
 
 They are `JSON` format, and should be an array of objects containing a `Pattern` regex and `Replacement` regex.
 
