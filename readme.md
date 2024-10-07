@@ -16,12 +16,13 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 
 ### Differences
 
-| What         | gluapack                                                     | apakr                                                                                               |
-| ------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Usability    | ❌ Cannot use same-server FastDL for download.               | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
-| DRM          | ❌ Uses DRM, is fully closed source, and cannot be modified. | ✔ No DRM, fully open source, and can be modified in any way you want. |
-| Auto Refresh | ❌ Does not rebuild the pack during refreshes, causing new clients being forced to use vanilla networking for those files. | ✔ Rebuilds the pack on refreshes, allowing new clients to load in just as fast as others. |
-| File Size    | ❌ Does not allow files bigger than `64.4`kb.                | ✔ Allows files up to `16.7`mb with the ability to be increased. |
+| What          | gluapack                                                     | apakr                                                                                               |
+| ------------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Usability     | ❌ Cannot use same-server FastDL for download.               | ✔ Can use same-server FastDL via `apakr_clone_directory`. |
+| DRM           | ❌ Uses DRM, is fully closed source, and cannot be modified. | ✔ No DRM, fully open source, and can be modified in any way you want. |
+| Auto Refresh  | ❌ Does not rebuild the pack during refreshes, causing new clients being forced to use vanilla networking for those files. | ✔ Rebuilds the pack on refreshes, allowing new clients to load in just as fast as others. |
+| File Size     | ❌ Does not allow files bigger than `64.4`kb.                | ✔ Allows files up to `16.7`mb with the ability to be increased. |
+| Preprocessors | ❌ Does not have any capacity of preprocessors.              | ✔ Has preprocessor support with user-defined templates. |
 
 ### Information
 
