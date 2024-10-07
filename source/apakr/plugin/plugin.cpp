@@ -47,7 +47,7 @@ void OnCloneDirectoryChanged(ConVar *_this, const char *OldString, float OldFloa
     if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97aapakr_clone_directory \x1B[97mwas changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97mapakr_clone_directory was changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
 }
@@ -57,7 +57,7 @@ void OnUploadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
     if (!INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97aapakr_upload_url \x1B[97mwas changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97mapakr_upload_url was changed. Issuing repack.\n");
 
     INSTANCE->NeedsRepack = true;
 }
@@ -67,14 +67,9 @@ void OnDownloadURLChanged(ConVar *_this, const char *OldString, float OldFloat)
     if (DownloadURLChanged || !INSTANCE->Ready || INSTANCE->CurrentPackName == "")
         return;
 
-    Msg("\x1B[94m[Apakr]: \x1B[97asv_downloadurl \x1B[97mwas changed. Issuing repack.\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97msv_downloadurl was changed. Issuing repack.\n");
 
-#if defined(APAKR_32_SERVER)
-    CurrentDownloadURL = sv_downloadurl->GetString();
-#else
-    CurrentDownloadURL = sv_downloadurl->Get<const char *>();
-#endif
-
+    CurrentDownloadURL = GetConvarString(sv_downloadurl);
     INSTANCE->NeedsRepack = true;
 }
 
@@ -215,15 +210,9 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
 
-#if defined ARCHITECTURE_X86
-    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
+    InstallConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged);
 
-    CurrentDownloadURL = sv_downloadurl->GetString();
-#else
-    sv_downloadurl->InstallChangeCallback((FnChangeCallback_t)OnDownloadURLChanged, false);
-
-    CurrentDownloadURL = sv_downloadurl->Get<const char *>();
-#endif
+    CurrentDownloadURL = GetConvarString(sv_downloadurl);
 
     return GModDataPackProxy::Singleton.Load() && IVEngineServerProxy::Singleton.Load();
 }
@@ -232,15 +221,9 @@ void CApakrPlugin::Unload()
 {
     Msg("\x1B[94m[Apakr]: \x1B[97mUnloading...\n");
 
-#if defined ARCHITECTURE_X86
-    ((HackedConVar *)sv_downloadurl)->m_fnChangeCallback = nullptr;
-    ((HackedConVar *)apakr_clone_directory)->m_fnChangeCallback = nullptr;
-    ((HackedConVar *)apakr_upload_url)->m_fnChangeCallback = nullptr;
-#else
-    sv_downloadurl->RemoveChangeCallback((FnChangeCallback_t)OnDownloadURLChanged);
-    apakr_clone_directory->RemoveChangeCallback((FnChangeCallback_t)OnCloneDirectoryChanged);
-    apakr_upload_url->RemoveChangeCallback((FnChangeCallback_t)OnUploadURLChanged);
-#endif
+    RemoveConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged);
+    RemoveConvarChangeCallback(apakr_clone_directory, (FnChangeCallback_t)OnCloneDirectoryChanged);
+    RemoveConvarChangeCallback(apakr_upload_url, (FnChangeCallback_t)OnUploadURLChanged);
 
     if (g_pLUAServer)
     {
@@ -281,6 +264,15 @@ void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxC
 void CApakrPlugin::GameFrame(bool Simulating)
 {
     this->CheckForRepack();
+
+    if (INSTANCE->CurrentPackName != GetConvarString(apakr_file))
+        apakr_file->SetValue(INSTANCE->CurrentPackName.c_str());
+
+    if (INSTANCE->CurrentPackSHA256 != GetConvarString(apakr_sha256))
+        apakr_sha256->SetValue(INSTANCE->CurrentPackSHA256.c_str());
+
+    if (INSTANCE->CurrentPackKey != GetConvarString(apakr_key))
+        apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
 
     if (!g_pLUAServer)
         g_pLUAServer = g_pILuaShared->GetLuaInterface(GarrysMod::Lua::State::SERVER);
@@ -535,6 +527,8 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
     Msg("\x1B[94m[Apakr]: \x1b[97mUploading data pack...\n");
     Msg("\x1B[94m[Apakr]: \x1b[97mURL: %s\n", UploadURL.c_str());
 
+    INSTANCE->LastUploadBegan = std::chrono::system_clock::now();
+
     char FullPath[MAX_PATH];
 
     if (!g_pFullFileSystem->RelativePathToFullPath_safe(Pack.c_str(), "GAME", FullPath))
@@ -622,6 +616,7 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
         {
             Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while uploading.\n", HTTPCode);
             Msg("\x1B[94m[Apakr]: \x1b[97mBody: %s\n", LastHTTPResponse.data());
+            Msg("\x1B[94m[Apakr]: \x1b[97mIP: %s\n", g_pVEngineServer->GMOD_GetServerAddress());
 
             return false;
         }
@@ -636,7 +631,9 @@ bool CApakrPlugin::UploadDataPack(std::string &UploadURL, std::string &Pack, std
             return false;
         }
 
-        Msg("\x1B[94m[Apakr]: \x1b[97mData pack uploaded successfully! Checking if it is reachable...\n");
+        Msg("\x1B[94m[Apakr]: \x1b[97mData pack uploaded successfully in \x1B[93m%0.2f \x1B[97mseconds! Checking if it "
+            "is reachable...\n",
+            TimeSince<std::chrono::milliseconds>(INSTANCE->LastUploadBegan).count() / 1000.0f);
 
         DownloadURLChanged = true;
 
@@ -705,7 +702,8 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
             return false;
         }
 
-        Msg("\x1B[94m[Apakr]: \x1b[97mData pack is reachable!\n");
+        Msg("\x1B[94m[Apakr]: \x1b[97mData pack is reachable! Finished in \x1B[93m%0.2f \x1B[97mseconds.\n",
+            TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
 
         return true;
     }
@@ -713,8 +711,8 @@ bool CApakrPlugin::CanDownloadPack(std::string DownloadURL)
     return false;
 }
 
-void AttemptDataPackUpload_Thread(std::string UploadURL, std::string CurrentFile, std::string Path,
-                                  std::vector<std::string> PreviousPacks, int Attempt)
+void FailedDataPackUpload_Thread(std::string UploadURL, std::string CurrentFile, std::string Path,
+                                 std::vector<std::string> PreviousPacks, int Attempt)
 {
     if (Attempt == 3)
     {
@@ -732,13 +730,7 @@ void AttemptDataPackUpload_Thread(std::string UploadURL, std::string CurrentFile
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
     if (!INSTANCE->UploadDataPack(UploadURL, Path, PreviousPacks))
-        return AttemptDataPackUpload_Thread(UploadURL, CurrentFile, Path, PreviousPacks, Attempt + 1);
-
-    Msg("\x1B[94m[Apakr]: \x1B[97mData pack is ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
-        "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
-        INSTANCE->PackedFiles, HumanSize(INSTANCE->UnpackedSize).c_str(), HumanSize(INSTANCE->PackedSize).c_str(),
-        PercentageDifference(INSTANCE->UnpackedSize, INSTANCE->PackedSize),
-        TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
+        return FailedDataPackUpload_Thread(UploadURL, CurrentFile, Path, PreviousPacks, Attempt + 1);
 
     INSTANCE->SetupDL(Path, CurrentFile);
 
@@ -770,9 +762,6 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
 
     if (g_pFullFileSystem->FileExists(CurrentPath.c_str(), "GAME"))
     {
-        apakr_file->SetValue(INSTANCE->CurrentPackName.c_str());
-        apakr_sha256->SetValue(INSTANCE->CurrentPackSHA256.c_str());
-        apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
         Msg("\x1B[94m[Apakr]: \x1B[97mData pack is the same, skipping repack!\n");
 
         if (!ClonePath.empty())
@@ -810,7 +799,7 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
                 INSTANCE->FailedUpload = false;
 
             if (INSTANCE->FailedUpload)
-                return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, CurrentPath, PreviousPacks, 1)
+                return std::thread(FailedDataPackUpload_Thread, UploadURL, CurrentFile, CurrentPath, PreviousPacks, 1)
                     .detach();
         }
 
@@ -859,10 +848,19 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
     g_pFullFileSystem->FindClose(FindHandle);
     g_pFullFileSystem->CreateDirHierarchy(Path.c_str(), "GAME");
     Path.append(INSTANCE->CurrentPackName).append(".bsp.bz2");
-    apakr_file->SetValue(INSTANCE->CurrentPackName.c_str());
-    apakr_sha256->SetValue(INSTANCE->CurrentPackSHA256.c_str());
-    apakr_key->SetValue(INSTANCE->CurrentPackKey.c_str());
     g_pFullFileSystem->WriteFile(Path.c_str(), "GAME", FileContents);
+
+    FileHandle_t Handle = g_pFullFileSystem->Open(Path.c_str(), "rb", "GAME");
+
+    INSTANCE->PackedSize = g_pFullFileSystem->Size(Handle);
+
+    g_pFullFileSystem->Close(Handle);
+
+    Msg("\x1B[94m[Apakr]: \x1B[97mData pack ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
+        "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
+        INSTANCE->PackedFiles, HumanSize(INSTANCE->UnpackedSize).c_str(), HumanSize(INSTANCE->PackedSize).c_str(),
+        PercentageDifference(INSTANCE->UnpackedSize, INSTANCE->PackedSize),
+        TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
 
     if (!ClonePath.empty())
     {
@@ -898,20 +896,8 @@ void BuildAndWriteDataPack_Thread(std::string ClonePath, std::string UploadURL)
             INSTANCE->FailedUpload = false;
 
         if (INSTANCE->FailedUpload)
-            return std::thread(AttemptDataPackUpload_Thread, UploadURL, CurrentFile, Path, PreviousPacks, 1).detach();
+            return std::thread(FailedDataPackUpload_Thread, UploadURL, CurrentFile, Path, PreviousPacks, 1).detach();
     }
-
-    FileHandle_t Handle = g_pFullFileSystem->Open(Path.c_str(), "rb", "GAME");
-
-    INSTANCE->PackedSize = g_pFullFileSystem->Size(Handle);
-
-    g_pFullFileSystem->Close(Handle);
-
-    Msg("\x1B[94m[Apakr]: \x1B[97mData pack is ready! We've packed \x1B[93m%d \x1B[97mfiles (\x1B[93m%s \x1B[97m-> "
-        "\x1B[93m%s \x1B[97m[\x1B[95m%0.2f%%\x1B[97m]) in \x1B[93m%0.2f \x1B[97mseconds.\n",
-        INSTANCE->PackedFiles, HumanSize(INSTANCE->UnpackedSize).c_str(), HumanSize(INSTANCE->PackedSize).c_str(),
-        PercentageDifference(INSTANCE->UnpackedSize, INSTANCE->PackedSize),
-        TimeSince<std::chrono::milliseconds>(INSTANCE->LastRepack).count() / 1000.0f);
 
     INSTANCE->SetupDL(Path, CurrentFile);
 
@@ -924,13 +910,8 @@ void CApakrPlugin::BuildAndWriteDataPack()
     if (this->Packing)
         return;
 
-#if defined(APAKR_32_SERVER)
-    std::string ClonePath = apakr_clone_directory->GetString();
-    std::string UploadURL = apakr_upload_url->GetString();
-#else
-    std::string ClonePath = apakr_clone_directory->Get<const char *>();
-    std::string UploadURL = apakr_upload_url->Get<const char *>();
-#endif
+    std::string ClonePath = GetConvarString(apakr_clone_directory);
+    std::string UploadURL = GetConvarString(apakr_upload_url);
 
     this->Packing = true;
     this->PackReady = false;

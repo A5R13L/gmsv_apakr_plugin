@@ -256,6 +256,33 @@ template <class T> inline T ResolveSymbols(SourceSDK::FactoryLoader &Loader, con
     return nullptr;
 }
 
+inline const char *GetConvarString(ConVar *CVar)
+{
+#if defined ARCHITECTURE_X86
+    return CVar->GetString();
+#else
+    return CVar->Get<const char *>();
+#endif
+}
+
+inline void InstallConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
+{
+#if defined ARCHITECTURE_X86
+    CVar->InstallChangeCallback(Callback);
+#else
+    CVar->InstallChangeCallback(Callback, false);
+#endif
+}
+
+inline void RemoveConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
+{
+#if defined ARCHITECTURE_X86
+    ((HackedConVar *)CVar)->m_fnChangeCallback = nullptr;
+#else
+    CVar->RemoveChangeCallback(Callback);
+#endif
+}
+
 class GModDataPack;
 
 #if defined(APAKR_32_SERVER)
@@ -330,7 +357,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     std::string CurrentPackName = "";
     std::string CurrentPackSHA256 = "";
     std::string CurrentPackKey = "";
-    std::chrono::time_point<std::chrono::system_clock> LastRepack;
+    std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan;
     std::vector<GmodPlayer *> Players;
     bool Ready = false;
     bool PackReady = false;
