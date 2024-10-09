@@ -767,7 +767,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     std::string FilePath = "data/apakr/";
     FileFindHandle_t FindHandle = NULL;
-    auto &[DataPack, HashString] = CApakrPlugin::Singleton->GetDataPackBuffer();
+    auto [DataPack, HashString] = CApakrPlugin::Singleton->GetDataPackBuffer();
     std::string CurrentFile = FilePath;
     Bootil::AutoBuffer EncryptedDataPack;
     CUtlBuffer FileContents;
@@ -1068,13 +1068,19 @@ std::string GModDataPackProxy::SHA256ToHex(const _32CharArray &SHA256)
 
 std::vector<uint8_t> GModDataPackProxy::Compress(uint8_t *Input, int Size)
 {
-    std::cout << "COMPRESS : " << sizeof(Input) << " | " << Size << std::endl;
+    std::cout << "COMPRESS : " << std::endl;
     size_t PropsSize = LZMA_PROPS_SIZE;
     size_t DestinationSize = Size + Size / 3 + 128;
     std::vector<uint8_t> Output(DestinationSize + PropsSize + 8, 0);
     uint8_t *PropStart = Output.data();
     uint8_t *SizeStart = PropStart + PropsSize;
     uint8_t *BodyStart = SizeStart + 8;
+
+    std::cout << "sizeof(Input) = " << Input << std::endl;
+    std::cout << "Size = " << Size << std::endl;
+    std::cout << "PropsSize = " << PropsSize << std::endl;
+    std::cout << "DestinationSize = " << DestinationSize << std::endl;
+    std::cout << "Output.size() = " << Output.size() << std::endl;
 
     if (LzmaCompress(BodyStart, &DestinationSize, Input, Size, PropStart, &PropsSize, 5, 65536, 3, 0, 2, 32, 2) !=
             SZ_OK ||

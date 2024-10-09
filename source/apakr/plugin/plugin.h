@@ -418,7 +418,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     virtual void OnEdictFreed(const edict_t *EDict){};
     virtual void FireGameEvent(IGameEvent *Event){};
     void CheckForRepack();
-    std::pair<Bootil::AutoBuffer, std::string> CApakrPlugin::GetDataPackBuffer();
+    std::pair<Bootil::AutoBuffer, std::string> GetDataPackBuffer();
     void SetupClientFiles();
 
     bool UploadDataPack(const std::string &UploadURL, const std::string &Pack,
