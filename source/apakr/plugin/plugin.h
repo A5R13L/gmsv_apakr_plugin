@@ -291,15 +291,7 @@ struct GmodDataPackFile
     const char *name;
     const char *source;
     const char *contents;
-
-    struct AutoBuffer
-    {
-        void *m_pData;
-        unsigned int m_iSize;
-        unsigned int m_iPos;
-        unsigned int m_iWritten;
-    } compressed;
-
+    Bootil::AutoBuffer compressed;
     unsigned int timesloadedserver;
     unsigned int timesloadedclient;
 };
