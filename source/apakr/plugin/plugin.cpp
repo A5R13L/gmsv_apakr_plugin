@@ -1076,7 +1076,7 @@ std::vector<uint8_t> GModDataPackProxy::Compress(uint8_t *Input, int Size)
     uint8_t *SizeStart = PropStart + PropsSize;
     uint8_t *BodyStart = SizeStart + 8;
 
-    std::cout << "sizeof(Input) = " << Input << std::endl;
+    std::cout << "sizeof(Input) = " << sizeof(Input) << std::endl;
     std::cout << "Size = " << Size << std::endl;
     std::cout << "PropsSize = " << PropsSize << std::endl;
     std::cout << "DestinationSize = " << DestinationSize << std::endl;
