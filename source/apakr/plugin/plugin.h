@@ -109,7 +109,7 @@ extern CNetworkStringTable *g_pDownloadables;
 extern GarrysMod::Lua::ILuaShared *g_pILuaShared;
 extern GarrysMod::Lua::ILuaInterface *g_pLUAServer;
 
-template <typename Return> inline Return TimeSince(Time When)
+template <typename Return> inline Return TimeSince(const Time &When)
 {
     Time Now = std::chrono::system_clock::now();
 
@@ -119,7 +119,7 @@ template <typename Return> inline Return TimeSince(Time When)
     return std::chrono::duration_cast<Return>(Now - When);
 }
 
-inline std::string PaddedHex(int Number, int Padding)
+inline std::string PaddedHex(const int &Number, const int &Padding)
 {
     std::ostringstream Stream;
 
@@ -128,7 +128,7 @@ inline std::string PaddedHex(int Number, int Padding)
     return Stream.str();
 }
 
-inline std::string ReplaceAll(std::string &Input, std::string Replace, std::string With)
+inline std::string ReplaceAll(std::string &Input, const std::string &Replace, const std::string &With)
 {
     if (Input.empty() || Replace.empty())
         return Input;
@@ -163,7 +163,7 @@ inline std::string HumanSize(double Bytes)
     return Stream.str();
 }
 
-inline double PercentageDifference(double UnpackedSize, double PackedSize)
+inline double PercentageDifference(const double &UnpackedSize, const double &PackedSize)
 {
     if (UnpackedSize == 0)
         return PackedSize == 0 ? 0 : 100;
@@ -193,44 +193,9 @@ inline bool IsBridgedInterface()
            IPAddress.substr(0, 4) != "172." && IPAddress.substr(0, 4) != "192.";
 }
 
-inline std::vector<Template> LoadTemplates()
-{
-    std::vector<Template> Output;
-    char FullPath[MAX_PATH];
-
-    if (!g_pFullFileSystem->RelativePathToFullPath_safe("apakr.templates", nullptr, FullPath))
-    {
-        Msg("\x1B[94m[Apakr]: \x1b[97mFailed to get full file path while processing file.\n");
-
-        return Output;
-    }
-
-    if (!std::filesystem::exists(FullPath))
-        return Output;
-
-    std::ifstream File(FullPath);
-    nlohmann::json Object;
-
-    try
-    {
-        File >> Object;
-
-        for (const auto &Rule : Object)
-            Output.push_back({Rule["Pattern"], Rule["Replacement"]});
-    }
-    catch (nlohmann::json::parse_error &_)
-    {
-        Msg("\x1B[94m[Apakr]: \x1b[97mapakr_templates.cfg is invalid.\n");
-
-        return {};
-    }
-
-    return Output;
-}
-
 static SymbolFinder Finder;
 
-template <class T> inline T ResolveSymbol(SourceSDK::FactoryLoader &Loader, const Symbol &Symbol)
+template <class T> inline T ResolveSymbol(const SourceSDK::FactoryLoader &Loader, const Symbol &Symbol)
 {
     if (Symbol.type == Symbol::Type::None)
         return nullptr;
@@ -243,7 +208,7 @@ template <class T> inline T ResolveSymbol(SourceSDK::FactoryLoader &Loader, cons
     return reinterpret_cast<T>(Pointer);
 }
 
-template <class T> inline T ResolveSymbols(SourceSDK::FactoryLoader &Loader, const std::vector<Symbol> &Symbols)
+template <class T> inline T ResolveSymbols(const SourceSDK::FactoryLoader &Loader, const std::vector<Symbol> &Symbols)
 {
     for (const auto &Symbol : Symbols)
     {
@@ -254,6 +219,54 @@ template <class T> inline T ResolveSymbols(SourceSDK::FactoryLoader &Loader, con
     }
 
     return nullptr;
+}
+
+inline void CloneFile(const std::string &CurrentPath, const std::filesystem::path &FullPath)
+{
+    try
+    {
+        std::filesystem::create_directories(FullPath.parent_path());
+    }
+    catch (std::filesystem::filesystem_error &Error)
+    {
+    }
+
+    char FullPathBuffer[512];
+
+    if (g_pFullFileSystem->RelativePathToFullPath(CurrentPath.c_str(), "GAME", FullPathBuffer, sizeof(FullPathBuffer)))
+        try
+        {
+            Msg("\x1B[94m[Apakr]: \x1B[97mCloning \x1B[93m%s \x1B[97mto \x1B[93m%s\x1B[97m.\n", FullPathBuffer,
+                FullPath.c_str());
+
+            std::filesystem::copy_file(FullPathBuffer, FullPath);
+        }
+        catch (std::filesystem::filesystem_error &Error)
+        {
+        }
+}
+
+static int BarSize = 40;
+static double LastPercentage = -1;
+
+inline void DisplayProgressBar(const double &Percentage)
+{
+    int Progress = BarSize * Percentage;
+
+    if (LastPercentage == Progress)
+        return;
+
+    LastPercentage = Progress;
+
+    Msg("\x1B[94m[Apakr]: \x1b[97m[\x1B[91m");
+
+    for (int Index = 0; Index < BarSize; ++Index)
+        if (Index < Progress)
+            Msg("=");
+        else
+            Msg(" ");
+
+    Msg("\x1b[97m] %.2f%%\n", Percentage * 100);
 }
 
 inline const char *GetConvarString(ConVar *CVar)
@@ -326,16 +339,18 @@ struct GmodPlayer
 
 struct DataPackEntry
 {
-    std::string Path = "";
-    std::string String = "";
+    std::string FilePath = "";
+    std::string Contents = "";
     int Size = 0;
-    std::string OriginalString = "";
+    std::string OriginalContents = "";
     int OriginalSize = 0;
     _32CharArray SHA256 = {};
-    std::vector<char> Compressed = {};
+    std::vector<char> CompressedContents = {};
 
     DataPackEntry(){};
-    DataPackEntry(std::string _Path, std::string _String, std::string _Original);
+
+    DataPackEntry(const std::string &EntryFilePath, const std::string &EntryContents,
+                  const std::string &EntryOriginalContents);
 };
 
 struct FileEntry
@@ -345,19 +360,23 @@ struct FileEntry
     char *SHA256 = nullptr;
 
     FileEntry(){};
-    FileEntry(std::string _Contents, int _Size);
+    FileEntry(const std::string &EntryContents, int EntrySize);
 };
 
 class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
 {
   public:
+    static CApakrPlugin *Singleton;
+
     double UnpackedSize = 0;
     double PackedSize = 0;
     int PackedFiles = 0;
     std::string CurrentPackName = "";
     std::string CurrentPackSHA256 = "";
     std::string CurrentPackKey = "";
-    std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan;
+    std::string TemplatePath = "";
+    std::filesystem::file_time_type LastTemplateEdit;
+    std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateCheck;
     std::vector<GmodPlayer *> Players;
     bool Ready = false;
     bool PackReady = false;
@@ -368,6 +387,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     bool WasDisabled = false;
     std::unordered_map<std::string, FileEntry> FileMap;
     std::map<int, DataPackEntry> DataPackMap;
+    std::vector<Template> PreprocessorTemplates;
 
     CApakrPlugin(){};
     ~CApakrPlugin(){};
@@ -414,10 +434,14 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     void CheckForRepack();
     Bootil::AutoBuffer GetDataPackBuffer();
     void SetupClientFiles();
-    bool UploadDataPack(std::string &UploadURL, std::string &Pack, std::vector<std::string> &PreviousPacks);
-    bool CanDownloadPack(std::string DownloadURL);
+
+    bool UploadDataPack(const std::string &UploadURL, const std::string &Pack,
+                        const std::vector<std::string> &PreviousPacks);
+
+    bool CanDownloadPack(const std::string &DownloadURL);
     void BuildAndWriteDataPack();
-    void SetupDL(std::string Path, std::string PreviousPath);
+    void SetupDL(const std::string &FilePath, const std::string &PreviousPath);
+    void LoadPreprocessorTemplates();
 };
 
 class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPackProxy>
@@ -433,10 +457,10 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     void AddOrUpdateFile(GmodDataPackFile *File, bool Refresh);
     _32CharArray GetSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const char *Data, size_t Length);
-    std::string GetHexSHA256(std::string Data);
-    std::string SHA256ToHex(_32CharArray SHA256);
+    std::string GetHexSHA256(const std::string &Data);
+    std::string SHA256ToHex(const _32CharArray &SHA256);
     std::vector<char> Compress(char *Input, int Size);
-    std::vector<char> Compress(std::string &Input);
+    std::vector<char> Compress(const std::string &Input);
     std::string Decompress(char *Input, int Size);
     std::vector<char> BZ2(char *Input, int Size);
     void ProcessFile(std::string &Code);
