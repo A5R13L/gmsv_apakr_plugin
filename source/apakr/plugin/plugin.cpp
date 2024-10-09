@@ -38,6 +38,19 @@ const std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
 #endif
 
+#elif defined SYSTEM_WINDOWS
+
+#if defined ARCHITECTURE_X86
+
+    Symbol::FronSignature("")
+
+#else
+
+    Symbol::FromSignature(
+        "\x4C\x8B\xDC\x49\x89\x5B\x08\x49\x89\x73\x10\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24\x2A\x2A")
+
+#endif
+
 #endif
 
 };
@@ -278,7 +291,8 @@ void CApakrPlugin::GameFrame(bool Simulating)
     if (this->CurrentPackKey != GetConvarString(apakr_key))
         apakr_key->SetValue(this->CurrentPackKey.c_str());
 
-    if (this->TemplatePath != "" && TimeSince<std::chrono::seconds>(this->LastTemplateUpdate) >= std::chrono::seconds(1))
+    if (this->TemplatePath != "" &&
+        TimeSince<std::chrono::seconds>(this->LastTemplateUpdate) >= std::chrono::seconds(1))
         this->LoadPreprocessorTemplates();
 
     if (!g_pLUAServer)
@@ -358,10 +372,11 @@ void CApakrPlugin::CheckForRepack()
     this->BuildAndWriteDataPack();
 }
 
-Bootil::AutoBuffer CApakrPlugin::GetDataPackBuffer()
+std::pair<Bootil::AutoBuffer, std::string> CApakrPlugin::GetDataPackBuffer()
 {
     int NeededSize = 0;
     std::vector<std::pair<std::string, std::string>> FileList;
+    std::string OutputBuffer;
 
     for (auto &[_, PackEntry] : this->DataPackMap)
     {
@@ -398,10 +413,12 @@ Bootil::AutoBuffer CApakrPlugin::GetDataPackBuffer()
         DataPack.Write(HexSize.data(), 6);
         DataPack.Write(PackEntry.OriginalContents.data(), PackEntry.OriginalSize);
 
+        OutputBuffer += SaltedPath + HexSize + PackEntry.OriginalContents;
+
         this->PackedFiles++;
     }
 
-    return DataPack;
+    return {DataPack, OutputBuffer};
 }
 
 void CApakrPlugin::SetupClientFiles()
@@ -429,9 +446,9 @@ void CApakrPlugin::SetupClientFiles()
 
             if (!FileMapEntry.SHA256)
             {
-                FileMapEntry.SHA256 = new char[32];
+                FileMapEntry.SHA256 = new uint8_t[32];
 
-                const char *Data = (const char *)g_pClientLuaFiles->GetStringUserData(Index, nullptr);
+                const uint8_t *Data = (const uint8_t *)g_pClientLuaFiles->GetStringUserData(Index, nullptr);
 
                 for (int ByteIndex = 0; ByteIndex < 32; ++ByteIndex)
                     FileMapEntry.SHA256[ByteIndex] = Data[ByteIndex];
@@ -750,7 +767,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     std::string FilePath = "data/apakr/";
     FileFindHandle_t FindHandle = NULL;
-    Bootil::AutoBuffer DataPack = CApakrPlugin::Singleton->GetDataPackBuffer();
+    auto &[DataPack, HashString] = CApakrPlugin::Singleton->GetDataPackBuffer();
     std::string CurrentFile = FilePath;
     Bootil::AutoBuffer EncryptedDataPack;
     CUtlBuffer FileContents;
@@ -759,7 +776,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     CurrentFile.append(CApakrPlugin::Singleton->CurrentPackName).append(".bsp.bz2");
 
     CApakrPlugin::Singleton->CurrentPackSHA256 =
-        GModDataPackProxy::Singleton.GetHexSHA256((char *)DataPack.GetBase(), DataPack.GetSize());
+        GModDataPackProxy::Singleton.GetHexSHA256(HashString.data(), HashString.size());
 
     CApakrPlugin::Singleton->CurrentPackName =
         GModDataPackProxy::Singleton
@@ -795,16 +812,16 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
         return;
     }
 
-    std::vector<char> CompressedData =
-        GModDataPackProxy::Singleton.Compress((char *)DataPack.GetBase(), DataPack.GetSize());
+    std::vector<uint8_t> CompressedData =
+        GModDataPackProxy::Singleton.Compress((uint8_t *)DataPack.GetBase(), DataPack.GetSize());
 
     Bootil::AutoBuffer CompressedDataPack(CompressedData.size());
 
     CompressedDataPack.Write(CompressedData.data(), CompressedData.size());
     Apakr_Encrypt(CompressedDataPack, EncryptedDataPack, CApakrPlugin::Singleton->CurrentPackKey);
 
-    std::vector<char> BZ2Data =
-        GModDataPackProxy::Singleton.BZ2((char *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
+    std::vector<uint8_t> BZ2Data =
+        GModDataPackProxy::Singleton.BZ2((uint8_t *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
 
     FileContents.Put(BZ2Data.data(), BZ2Data.size());
 
@@ -991,14 +1008,15 @@ void GModDataPackProxy::Unload()
     UnHook(this->SendFileToClient_Original);
 }
 
-void GModDataPackProxy::AddOrUpdateFile(GmodDataPackFile *FileContents, bool Refresh)
+void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bool Refresh)
 {
     GModDataPackProxy &Self = this->Singleton;
+    std::string FileName = FileContents->name;
 
     CApakrPlugin::Singleton->LastRepack = std::chrono::system_clock::now();
     CApakrPlugin::Singleton->NeedsRepack = true;
 
-    FileHandle_t Handle = g_pFullFileSystem->Open(FileContents->name, "rb", "GAME");
+    FileHandle_t Handle = g_pFullFileSystem->Open(FileName.c_str(), "rb", "GAME");
     int FileSize = g_pFullFileSystem->Size(Handle);
 
     g_pFullFileSystem->Close(Handle);
@@ -1048,26 +1066,25 @@ std::string GModDataPackProxy::SHA256ToHex(const _32CharArray &SHA256)
     return Stream.str();
 }
 
-std::vector<char> GModDataPackProxy::Compress(char *Input, int Size)
+std::vector<uint8_t> GModDataPackProxy::Compress(uint8_t *Input, int Size)
 {
-    size_t InputLength = Size;
+    std::cout << "COMPRESS : " << sizeof(Input) << " | " << Size << std::endl;
     size_t PropsSize = LZMA_PROPS_SIZE;
-    size_t DestinationSize = InputLength + InputLength / 3 + 128;
-    std::vector<char> Output(DestinationSize + PropsSize + 8, 0);
-    uint8_t *InputData = (uint8_t *)Input;
-    uint8_t *PropStart = (uint8_t *)Output.data();
+    size_t DestinationSize = Size + Size / 3 + 128;
+    std::vector<uint8_t> Output(DestinationSize + PropsSize + 8, 0);
+    uint8_t *PropStart = Output.data();
     uint8_t *SizeStart = PropStart + PropsSize;
     uint8_t *BodyStart = SizeStart + 8;
 
-    if (LzmaCompress(BodyStart, &DestinationSize, InputData, InputLength, PropStart, &PropsSize, 5, 65536, 3, 0, 2, 32,
-                     2) != SZ_OK ||
+    if (LzmaCompress(BodyStart, &DestinationSize, Input, Size, PropStart, &PropsSize, 5, 65536, 3, 0, 2, 32, 2) !=
+            SZ_OK ||
         PropsSize != LZMA_PROPS_SIZE)
         return {};
 
-    SizeStart[0] = InputLength & 0xFF;
-    SizeStart[1] = (InputLength >> 8) & 0xFF;
-    SizeStart[2] = (InputLength >> 16) & 0xFF;
-    SizeStart[3] = (InputLength >> 24) & 0xFF;
+    SizeStart[0] = Size & 0xFF;
+    SizeStart[1] = (Size >> 8) & 0xFF;
+    SizeStart[2] = (Size >> 16) & 0xFF;
+    SizeStart[3] = (Size >> 24) & 0xFF;
     SizeStart[4] = 0;
     SizeStart[5] = 0;
     SizeStart[6] = 0;
@@ -1078,14 +1095,14 @@ std::vector<char> GModDataPackProxy::Compress(char *Input, int Size)
     return Output;
 }
 
-std::string GModDataPackProxy::Decompress(char *Input, int Size)
+std::string GModDataPackProxy::Decompress(const uint8_t *Input, int Size)
 {
     if (Size <= LZMA_PROPS_SIZE + 8)
         return "";
 
-    const unsigned char *PropsBuffer = (unsigned char *)Input;
-    const unsigned char *SizeBuffer = PropsBuffer + LZMA_PROPS_SIZE;
-    const unsigned char *DataBuffer = SizeBuffer + 8;
+    const uint8_t *PropsBuffer = (uint8_t *)Input;
+    const uint8_t *SizeBuffer = PropsBuffer + LZMA_PROPS_SIZE;
+    const uint8_t *DataBuffer = SizeBuffer + 8;
 
     if (PropsBuffer[0] >= (9 * 5 * 5))
         return "";
@@ -1099,27 +1116,27 @@ std::string GModDataPackProxy::Decompress(char *Input, int Size)
     size_t DestinationLength = SizeBuffer[0] | (SizeBuffer[1] << 8) | (SizeBuffer[2] << 16) | (SizeBuffer[3] << 24);
     size_t RealDestinationLength = DestinationLength;
     size_t SourceLength = Size - LZMA_PROPS_SIZE - 8;
-    std::vector<char> Output(RealDestinationLength, 0);
+    std::vector<uint8_t> Output(RealDestinationLength, 0);
 
-    if (LzmaUncompress((unsigned char *)Output.data(), &DestinationLength, DataBuffer, &SourceLength, PropsBuffer,
+    if (LzmaUncompress((uint8_t *)Output.data(), &DestinationLength, DataBuffer, &SourceLength, PropsBuffer,
                        LZMA_PROPS_SIZE) != SZ_OK)
         return "";
 
-    return std::string(Output.data());
+    return std::string((char *)Output.data());
 }
 
-std::vector<char> GModDataPackProxy::Compress(const std::string &Input)
+std::vector<uint8_t> GModDataPackProxy::Compress(const std::string &Input)
 {
-    return this->Compress((char *)Input.data(), Input.size() + 1);
+    return this->Compress((uint8_t *)Input.data(), Input.size() + 1);
 }
 
-std::vector<char> GModDataPackProxy::BZ2(char *Input, int Size)
+std::vector<uint8_t> GModDataPackProxy::BZ2(const uint8_t *Input, int Size)
 {
     unsigned int CompressedSize = Size + (Size / 100) + 600;
-    std::vector<char> Output(CompressedSize);
+    std::vector<uint8_t> Output(CompressedSize);
 
-    if (BZ2_bzBuffToBuffCompress(Output.data(), &CompressedSize, Input, Size, BZ2_DEFAULT_BLOCKSIZE100k, 0,
-                                 BZ2_DEFAULT_WORKFACTOR) != BZ_OK)
+    if (BZ2_bzBuffToBuffCompress((char *)Output.data(), &CompressedSize, (char *)Input, Size, BZ2_DEFAULT_BLOCKSIZE100k,
+                                 0, BZ2_DEFAULT_WORKFACTOR) != BZ_OK)
         return {};
 
     Output.resize(CompressedSize);
@@ -1153,14 +1170,14 @@ void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
         return;
 
     DataPackEntry &Entry = CApakrPlugin::Singleton->DataPackMap[FileID];
-    const std::vector<char> &CompressedBuffer = Entry.CompressedContents;
+    const std::vector<uint8_t> &CompressedBuffer = Entry.CompressedContents;
 
     if (CompressedBuffer.empty())
         return;
 
     int BufferSize = 1 + 32 + CompressedBuffer.size() + 4 + 2;
 
-    std::vector<char> Buffer(BufferSize, 0);
+    std::vector<uint8_t> Buffer(BufferSize, 0);
     bf_write Writer("Apakr SendDataPackFile Buffer", Buffer.data(), Buffer.size());
 
     Writer.WriteByte(4);
@@ -1233,7 +1250,7 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
 
     Length = Length - 32;
 
-    std::vector<char> CompressedContents(Length, 0);
+    std::vector<uint8_t> CompressedContents(Length, 0);
 
     Buffer.SeekRelative(32 << 3);
     Buffer.ReadBytes((void *)CompressedContents.data(), Length);
@@ -1246,7 +1263,7 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
     ReplaceAll(Contents, "\r", "");
     GModDataPackProxy::Singleton.ProcessFile(Contents);
 
-    std::vector<char> FileBuffer = GModDataPackProxy::Singleton.Compress(Contents);
+    std::vector<uint8_t> FileBuffer = GModDataPackProxy::Singleton.Compress(Contents);
     _32CharArray SHA256 = GModDataPackProxy::Singleton.GetSHA256(Contents.data(), Contents.length() + 1);
     void *BF_Data_New = malloc(65536);
     bf_write Writer(BF_Data_New, 65536);

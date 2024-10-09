@@ -35,7 +35,7 @@
 #define GMOD_LUASHARED_INTERFACE "LUASHARED003"
 
 using Time = std::chrono::system_clock::time_point;
-using _32CharArray = std::array<char, 32>;
+using _32CharArray = std::array<uint8_t, 32>;
 
 struct Template
 {
@@ -288,9 +288,20 @@ inline IFileSystem *g_pFullFileSystem = nullptr;
 struct GmodDataPackFile
 {
     int time;
+#if defined SYSTEM_LINUX
+
     const char *name;
     const char *source;
     const char *contents;
+
+#elif defined SYSTEM_WINDOWS
+
+    std::string name;
+    std::string source;
+    std::string contents;
+
+#endif
+
     Bootil::AutoBuffer compressed;
     unsigned int timesloadedserver;
     unsigned int timesloadedclient;
@@ -320,7 +331,7 @@ struct DataPackEntry
     std::string OriginalContents = "";
     int OriginalSize = 0;
     _32CharArray SHA256 = {};
-    std::vector<char> CompressedContents = {};
+    std::vector<uint8_t> CompressedContents = {};
 
     DataPackEntry(){};
 
@@ -332,7 +343,7 @@ struct FileEntry
 {
     std::string Contents = "";
     int Size = 0;
-    char *SHA256 = nullptr;
+    uint8_t *SHA256 = nullptr;
 
     FileEntry(){};
     FileEntry(const std::string &EntryContents, int EntrySize);
@@ -407,7 +418,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     virtual void OnEdictFreed(const edict_t *EDict){};
     virtual void FireGameEvent(IGameEvent *Event){};
     void CheckForRepack();
-    Bootil::AutoBuffer GetDataPackBuffer();
+    std::pair<Bootil::AutoBuffer, std::string> CApakrPlugin::GetDataPackBuffer();
     void SetupClientFiles();
 
     bool UploadDataPack(const std::string &UploadURL, const std::string &Pack,
@@ -429,15 +440,15 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
 
     bool Load();
     void Unload();
-    void AddOrUpdateFile(GmodDataPackFile *File, bool Refresh);
+    void AddOrUpdateFile(const GmodDataPackFile *File, bool Refresh);
     _32CharArray GetSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const std::string &Data);
     std::string SHA256ToHex(const _32CharArray &SHA256);
-    std::vector<char> Compress(char *Input, int Size);
-    std::vector<char> Compress(const std::string &Input);
-    std::string Decompress(char *Input, int Size);
-    std::vector<char> BZ2(char *Input, int Size);
+    std::vector<uint8_t> Compress(uint8_t *Input, int Size);
+    std::vector<uint8_t> Compress(const std::string &Input);
+    std::string Decompress(const uint8_t *Input, int Size);
+    std::vector<uint8_t> BZ2(const uint8_t *Input, int Size);
     void ProcessFile(std::string &Code);
     void SendDataPackFile(int Client, int FileID);
     void SendFileToClient(int Client, int FileID);
