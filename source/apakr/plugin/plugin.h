@@ -288,20 +288,9 @@ inline IFileSystem *g_pFullFileSystem = nullptr;
 struct GmodDataPackFile
 {
     int time;
-#if defined SYSTEM_LINUX
-
     const char *name;
     const char *source;
     const char *contents;
-
-#elif defined SYSTEM_WINDOWS
-
-    std::string name;
-    std::string source;
-    std::string contents;
-
-#endif
-
     Bootil::AutoBuffer compressed;
     unsigned int timesloadedserver;
     unsigned int timesloadedclient;
