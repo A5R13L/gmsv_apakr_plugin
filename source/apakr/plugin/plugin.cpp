@@ -38,6 +38,20 @@ const std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
 #endif
 
+#elif defined SYSTEM_WINDOWS
+
+#if defined ARCHITECTURE_X86
+
+    Symbol::FronSignature("")
+
+#else
+
+    Symbol::FromSignature("\x4C\x8B\xDC\x49\x89\x5B\x08\x49\x89\x73\x10\x57\x48\x81\xEC\x00\x00\x00\x00\x33\xC9\xC6\x44\x24\x00\x00")
+
+#endif
+
+#endif
+
 #endif
 
 };
