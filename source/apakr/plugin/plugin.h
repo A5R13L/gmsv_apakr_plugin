@@ -376,7 +376,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     std::string CurrentPackKey = "";
     std::string TemplatePath = "";
     std::filesystem::file_time_type LastTemplateEdit;
-    std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateCheck;
+    std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
     std::vector<GmodPlayer *> Players;
     bool Ready = false;
     bool PackReady = false;

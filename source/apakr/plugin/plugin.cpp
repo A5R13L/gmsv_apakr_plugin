@@ -278,7 +278,7 @@ void CApakrPlugin::GameFrame(bool Simulating)
     if (this->CurrentPackKey != GetConvarString(apakr_key))
         apakr_key->SetValue(this->CurrentPackKey.c_str());
 
-    if (this->TemplatePath != "" && TimeSince<std::chrono::seconds>(this->LastTemplateCheck) >= std::chrono::seconds(1))
+    if (this->TemplatePath != "" && TimeSince<std::chrono::seconds>(this->LastTemplateUpdate) >= std::chrono::seconds(1))
         this->LoadPreprocessorTemplates();
 
     if (!g_pLUAServer)
@@ -913,6 +913,8 @@ void CApakrPlugin::SetupDL(const std::string &FilePath, const std::string &Previ
 
 void CApakrPlugin::LoadPreprocessorTemplates()
 {
+    this->LastTemplateUpdate = std::chrono::system_clock::now();
+
     char FullPath[MAX_PATH];
 
     if (!g_pFullFileSystem->RelativePathToFullPath_safe("apakr.templates", nullptr, FullPath))
@@ -944,7 +946,6 @@ void CApakrPlugin::LoadPreprocessorTemplates()
 
     this->TemplatePath = FullPath;
     this->LastTemplateEdit = std::filesystem::last_write_time(FullPath);
-    this->LastTemplateCheck = std::chrono::system_clock::now();
 }
 
 bool GModDataPackProxy::Load()
