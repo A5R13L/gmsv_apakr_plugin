@@ -3,8 +3,6 @@
 #include <GarrysMod/Lua/LuaInterface.h>
 #include <GarrysMod/FactoryLoader.hpp>
 #include <apakr/cnetworkstringtable.h>
-#include <GarrysMod/ModuleLoader.hpp>
-#include <GarrysMod/Lua/Interface.h>
 #include <apakr/plugin/encryption.h>
 #include <../utils/lzma/C/LzmaLib.h>
 #include <scanning/symbolfinder.hpp>
@@ -16,30 +14,17 @@
 #include <filesystem_base.h>
 #include <recipientfilter.h>
 #include <nlohmann/json.hpp>
-#include <inetmsghandler.h>
 #include <Bootil/Bootil.h>
 #include <apakr/convar.h>
-#include <tier1/netadr.h>
 #include <bzip2/bzlib.h>
-#include <igameevents.h>
 #include <inetchannel.h>
-#include <sys/socket.h>
 #include <curl/curl.h>
-#include <arpa/inet.h>
 #include <filesystem>
 #include <lauxlib.h>
-#include <pthread.h>
 #include <iserver.h>
 #include <iclient.h>
-#include <convar.h>
-#include <unistd.h>
-#include <eiface.h>
-#include <iomanip>
-#include <netdb.h>
-#include <random>
 #include <thread>
 #include <regex>
-#include <map>
 
 #ifndef FCVAR_LUA_SERVER
 #define FCVAR_LUA_SERVER (1 << 19)
@@ -51,8 +36,6 @@
 
 using Time = std::chrono::system_clock::time_point;
 using _32CharArray = std::array<char, 32>;
-
-netadr_t LocalAddress;
 
 struct Template
 {

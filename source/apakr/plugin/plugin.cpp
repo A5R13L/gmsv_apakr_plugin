@@ -52,8 +52,6 @@ const std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
 #endif
 
-#endif
-
 };
 
 void OnCloneDirectoryChanged_Callback(ConVar *_this, const char *OldString, float OldFloat)
