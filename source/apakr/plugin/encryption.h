@@ -8,51 +8,51 @@
 #include <algorithm>
 #include <numeric>
 
-// Key is the current encryption key (64 characters of hex)
+// Key is the current encryption Key (64 characters of HexString)
 
 inline const char *APAKR_DECRYPTION_FUNCTION = R"(
 	local KeyLength = #Key
 
 	// https://github.com/philanc/plc/blob/master/plc/rc4.lua
 
-	local function RC4(key, plain)
-		local function step(s, i, j)
-			i = bit.band(i + 1, 0xff)
-			local ii = i + 1
-			j = bit.band(j + s[ii], 0xff)
-			local jj = j + 1
-			s[ii], s[jj] = s[jj], s[ii]
-			local k = s[bit.band(s[ii] + s[jj], 0xff) + 1]
+	local function RC4(Key, plain)
+		local function step(Buffer, Index, Value)
+			Index = bit.band(Index + 1, 0xff)
+			local ii = Index + 1
+			Value = bit.band(Value + Buffer[ii], 0xff)
+			local jj = Value + 1
+			Buffer[ii], Buffer[jj] = Buffer[jj], Buffer[ii]
+			local K = Buffer[bit.band(Buffer[ii] + Buffer[jj], 0xff) + 1]
 
-			return s, i, j, k
+			return Buffer, Index, Value, K
 		end
 
-		local function keysched(key)
-			local s = {}
-			local j, ii, jj = 0
+		local function keysched(Key)
+			local Buffer = {}
+			local Value, ii, jj = 0
 
-			for i = 0, 255 do
-				s[i + 1] = i
+			for Index = 0, 255 do
+				Buffer[Index + 1] = Index
 			end
 
-			for i = 0, 255 do
-				ii = i + 1
-				j = bit.band(j + s[ii] + string.byte(key, (i % 32) + 1), 0xff)
-				jj = j + 1
-				s[ii], s[jj] = s[jj], s[ii]
+			for Index = 0, 255 do
+				ii = Index + 1
+				Value = bit.band(Value + Buffer[ii] + string.byte(Key, (Index % 32) + 1), 0xff)
+				jj = Value + 1
+				Buffer[ii], Buffer[jj] = Buffer[jj], Buffer[ii]
 			end
 
-			return s
+			return Buffer
 		end
 
-		local s = keysched(key)
-		local i, j = 0, 0
-		local k
+		local Buffer = keysched(Key)
+		local Index, Value = 0, 0
+		local K
 		local Output = {}
 
 		for n = 1, #plain do
-			s, i, j, k = step(s, i, j)
-			Output[n] = string.char(bit.bxor(string.byte(plain, n), k))
+			Buffer, Index, Value, K = step(Buffer, Index, Value)
+			Output[n] = string.char(bit.bxor(string.byte(plain, n), K))
 		end
 
 		return table.concat(Output)
@@ -69,66 +69,65 @@ inline const char *APAKR_DECRYPTION_FUNCTION = R"(
 	end
 )";
 
-inline std::vector<uint8_t> HexStringToBytes(const std::string &hex)
+inline std::vector<uint8_t> HexStringToBytes(const std::string &HexString)
 {
-	std::vector<uint8_t> bytes;
+    std::vector<uint8_t> Output;
 
-	for (size_t i = 0; i < hex.size(); i += 2)
-	{
-		std::string byteString = hex.substr(i, 2);
-		uint8_t _byte = std::stoi(byteString, nullptr, 16);
+    for (size_t Index = 0; Index < HexString.size(); Index += 2)
+    {
+        std::string Byte = HexString.substr(Index, 2);
 
-		bytes.push_back(_byte);
-	}
+        Output.push_back((uint8_t)std::stoi(Byte, nullptr, 16));
+    }
 
-	return bytes;
+    return Output;
 }
 
-inline std::string RC4(const std::vector<uint8_t> &key, char *data, int size)
+inline std::string RC4(const std::vector<uint8_t> &Key, char *Data, int Size)
 {
-	size_t keyLength = key.size();
+    size_t keyLength = Key.size();
 
-	std::vector<uint8_t> s(256);
+    std::vector<uint8_t> Buffer(256);
 
-	std::iota(s.begin(), s.end(), 0);
+    std::iota(Buffer.begin(), Buffer.end(), 0);
 
-	int j = 0;
-	for (int i = 0; i < 256; ++i)
-	{
-		j = (j + s[i] + key[i % keyLength]) % 256;
+    int Value = 0;
 
-		std::swap(s[i], s[j]);
-	}
+    for (int Index = 0; Index < 256; ++Index)
+    {
+        Value = (Value + Buffer[Index] + Key[Index % keyLength]) % 256;
 
-	int i = 0;
+        std::swap(Buffer[Index], Buffer[Value]);
+    }
 
-	j = 0;
+    int Index = 0;
 
-	std::string output;
+    Value = 0;
 
-	output.reserve(size);
+    std::string Output;
 
-	for (size_t index = 0; index < (size_t)size; ++index)
-	{
-		i = (i + 1) % 256;
-		j = (j + s[i]) % 256;
+    Output.reserve(Size);
 
-		std::swap(s[i], s[j]);
+    for (int Position = 0; Position < Size; ++Position)
+    {
+        Index = (Index + 1) % 256;
+        Value = (Value + Buffer[Index]) % 256;
 
-		int k = s[(s[i] + s[j]) % 256];
-		uint8_t _byte = data[index] ^ k;
+        std::swap(Buffer[Index], Buffer[Value]);
 
-		output.push_back(static_cast<char>(_byte));
-	}
+        int K = Buffer[(Buffer[Index] + Buffer[Value]) % 256];
 
-	return output;
+        Output.push_back((char)(Data[Position] ^ K));
+    }
+
+    return Output;
 }
 
-inline void Apakr_Encrypt(Bootil::AutoBuffer &DataPack, Bootil::AutoBuffer &EncryptedDataPack,
-						  std::string CurrentPackKey)
+inline void Apakr_Encrypt(Bootil::_AutoBuffer &DataPack, Bootil::_AutoBuffer &EncryptedDataPack,
+                          std::string CurrentPackKey)
 {
-	std::vector<uint8_t> KeyBin = HexStringToBytes(CurrentPackKey);
-	std::string Data = RC4(KeyBin, (char *)DataPack.GetBase(), DataPack.GetSize());
+    std::vector<uint8_t> KeyBin = HexStringToBytes(CurrentPackKey);
+    std::string Data = RC4(KeyBin, (char *)DataPack.GetBase(), DataPack.GetSize());
 
-	EncryptedDataPack.Write(Data.data(), Data.size());
+    EncryptedDataPack.Write(Data.data(), (uint)Data.size());
 }

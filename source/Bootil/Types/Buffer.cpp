@@ -77,7 +77,7 @@ namespace Bootil
 	unsigned int	Buffer::GetWritten() const { return m_iWritten; }
 
 
-	AutoBuffer::AutoBuffer( int iInitialSize )
+	_AutoBuffer::_AutoBuffer( int iInitialSize )
 	{
 		m_pData		= NULL;
 		m_iSize		= 0;
@@ -87,7 +87,7 @@ namespace Bootil
 		EnsureCapacity( iInitialSize );
 	}
 
-	AutoBuffer::~AutoBuffer()
+	_AutoBuffer::~_AutoBuffer()
 	{
 		if ( m_pData )
 		{
@@ -96,7 +96,7 @@ namespace Bootil
 		}
 	}
 
-	void AutoBuffer::Clear()
+	void _AutoBuffer::Clear()
 	{
 		m_iWritten	= 0;
 		m_iPos		= 0;
@@ -109,7 +109,7 @@ namespace Bootil
 		}
 	}
 
-	bool AutoBuffer::EnsureCapacity( unsigned int iSize )
+	bool _AutoBuffer::EnsureCapacity( unsigned int iSize )
 	{
 		if ( iSize <= m_iSize ) { return true; }
 

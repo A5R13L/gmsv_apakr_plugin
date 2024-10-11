@@ -1,9 +1,8 @@
 #include <apakr/plugin/plugin.h>
 
-CApakrPlugin *CApakrPlugin::Singleton = new CApakrPlugin();
 GModDataPackProxy GModDataPackProxy::Singleton;
 IVEngineServerProxy IVEngineServerProxy::Singleton;
-
+CApakrPlugin *CApakrPlugin::Singleton = new CApakrPlugin();
 IServer *g_pServer = nullptr;
 IVEngineServer *g_pVEngineServer = nullptr;
 CNetworkStringTableContainer *g_pNetworkStringTableContainer = nullptr;
@@ -20,40 +19,14 @@ ConVar *sv_downloadurl = nullptr;
 bool DownloadURLChanged = false;
 bool LuaValue = false;
 std::string CurrentDownloadURL;
-using luaL_loadbufferx_t = decltype(&luaL_loadbufferx);
 luaL_loadbufferx_t luaL_loadbufferx_Original = nullptr;
 Detouring::Hook LoadBufferXHook;
 
-const std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
+#if defined APAKR_32_SERVER
 
-#if defined SYSTEM_LINUX
-
-#if defined ARCHITECTURE_X86
-
-    Symbol::FromName("_ZN14CVEngineServer17GMOD_SendToClientEP16IRecipientFilterPvi")
-
-#else
-
-    Symbol::FromSignature("\x55\x48\x89\xE5\x41\x57\x49\x89\xD7\x41\x56\x49\x89\xF6\x41\x55\x41\x54")
+IFileSystem *g_pFullFileSystem = nullptr;
 
 #endif
-
-#elif defined SYSTEM_WINDOWS
-
-#if defined ARCHITECTURE_X86
-
-    Symbol::FronSignature("")
-
-#else
-
-    Symbol::FromSignature(
-        "\x4C\x8B\xDC\x49\x89\x5B\x08\x49\x89\x73\x10\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24\x2A\x2A")
-
-#endif
-
-#endif
-
-};
 
 void OnCloneDirectoryChanged_Callback(ConVar *_this, const char *OldString, float OldFloat)
 {
@@ -93,8 +66,8 @@ DataPackEntry::DataPackEntry(const std::string &EntryFilePath, const std::string
     ReplaceAll(this->Contents, "\r", "");
     GModDataPackProxy::Singleton.ProcessFile(this->Contents);
 
-    this->Size = this->Contents.size() + 1;
-    this->OriginalSize = this->OriginalContents.size() + 1;
+    this->Size = (int)this->Contents.size() + 1;
+    this->OriginalSize = (int)this->OriginalContents.size() + 1;
     this->SHA256 = GModDataPackProxy::Singleton.GetSHA256(this->Contents.data(), this->Size);
     this->CompressedContents = GModDataPackProxy::Singleton.Compress(this->Contents);
 }
@@ -123,7 +96,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mIFileSystem\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     g_pNetworkStringTableContainer =
@@ -133,7 +106,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mINetworkStringTableContainer\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     g_pServer = InterfacePointers::Server();
@@ -142,7 +115,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mIServer\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     g_pVEngineServer = InterfacePointers::VEngineServer();
@@ -151,7 +124,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mIVEngineServer\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     g_pCVar = InterfacePointers::Cvar();
@@ -160,7 +133,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mICVar\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     SourceSDK::FactoryLoader LuaSharedFactoryLoader("lua_shared");
@@ -169,7 +142,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mlua_shared\x1B[97m FactoryLoader!\n");
 
-        return false;
+        return true;
     }
 
     g_pILuaShared = LuaSharedFactoryLoader.GetInterface<GarrysMod::Lua::ILuaShared>(GMOD_LUASHARED_INTERFACE);
@@ -178,7 +151,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mILuaShared\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     luaL_loadbufferx_Original = (luaL_loadbufferx_t)LuaSharedFactoryLoader.GetSymbol("luaL_loadbufferx");
@@ -187,7 +160,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mluaL_loadbufferx\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     if (!LoadBufferXHook.Create(Detouring::Hook::Target((void *)luaL_loadbufferx_Original),
@@ -195,14 +168,14 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to hook \x1B[91mluaL_loadbufferx\x1B[97m!\n");
 
-        return false;
+        return true;
     }
 
     if (!LoadBufferXHook.Enable())
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to enable \x1B[91mluaL_loadbufferx\x1B[97m hook!\n");
 
-        return false;
+        return true;
     }
 
     ConVar_Register();
@@ -226,12 +199,18 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
 
     this->LoadPreprocessorTemplates();
 
-    return GModDataPackProxy::Singleton.Load() && IVEngineServerProxy::Singleton.Load();
+    if (GModDataPackProxy::Singleton.Load() && IVEngineServerProxy::Singleton.Load())
+        this->Loaded = true;
+
+    return true;
 }
 
 void CApakrPlugin::Unload()
 {
     Msg("\x1B[94m[Apakr]: \x1B[97mUnloading...\n");
+
+    if (!this->Loaded)
+        return;
 
     RemoveConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged_Callback);
     RemoveConvarChangeCallback(apakr_clone_directory, (FnChangeCallback_t)OnCloneDirectoryChanged_Callback);
@@ -280,6 +259,9 @@ void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxC
 
 void CApakrPlugin::GameFrame(bool Simulating)
 {
+    if (!this->Loaded)
+        return;
+
     this->CheckForRepack();
 
     if (this->CurrentPackName != GetConvarString(apakr_file))
@@ -319,6 +301,9 @@ void CApakrPlugin::GameFrame(bool Simulating)
 
 void CApakrPlugin::ClientActive(edict_t *Entity)
 {
+    if (!this->Loaded)
+        return;
+
     int Index = Entity->m_EdictIndex - 1;
 
     if (!this->Players[Index])
@@ -329,6 +314,9 @@ void CApakrPlugin::ClientActive(edict_t *Entity)
 
 void CApakrPlugin::ClientDisconnect(edict_t *Entity)
 {
+    if (!this->Loaded)
+        return;
+
     int Index = Entity->m_EdictIndex - 1;
 
     if (!this->Players[Index])
@@ -340,6 +328,9 @@ void CApakrPlugin::ClientDisconnect(edict_t *Entity)
 PLUGIN_RESULT CApakrPlugin::ClientConnect(bool *AllowConnection, edict_t *Entity, const char *Name, const char *Address,
                                           char *Rejection, int MaxRejectionLength)
 {
+    if (!this->Loaded)
+        return PLUGIN_CONTINUE;
+
     int Index = Entity->m_EdictIndex - 1;
     IClient *Client = g_pServer->GetClient(Index);
 
@@ -392,7 +383,7 @@ std::pair<std::string, int> CApakrPlugin::GetDataPackInfo()
                   return First.first < Second.first;
               });
 
-    std::string SHABuffer = "";
+    std::string SHABuffer;
 
     for (auto &[FilePath, FileSHA256] : FileList)
         SHABuffer += FilePath + ":" + FileSHA256;
@@ -436,7 +427,7 @@ void CApakrPlugin::SetupClientFiles()
             if (!DataPackMapEntry.CompressedContents.empty())
             {
                 DataPackMapEntry.OriginalContents = FileMapEntry.Contents;
-                DataPackMapEntry.OriginalSize = DataPackMapEntry.OriginalContents.size() + 1;
+                DataPackMapEntry.OriginalSize = (int)DataPackMapEntry.OriginalContents.size() + 1;
 
                 continue;
             }
@@ -460,7 +451,7 @@ void CApakrPlugin::SetupClientFiles()
     }
 }
 
-std::string LastHTTPResponse = "";
+std::string LastHTTPResponse;
 
 int ProgressCallback(void *, curl_off_t, curl_off_t, curl_off_t TotalToUpload, curl_off_t CurrentUpload)
 {
@@ -545,7 +536,12 @@ bool CApakrPlugin::UploadDataPack(const std::string &UploadURL, const std::strin
     ServerIP = ServerIP.substr(0, ServerIP.find(":"));
 
     if (ServerIP == "0.0.0.0")
+    {
         std::thread(WaitForSteam_Thread).join();
+
+        ServerIP = g_pVEngineServer->GMOD_GetServerAddress();
+        ServerIP = ServerIP.substr(0, ServerIP.find(":"));
+    }
 
     if (Handle)
     {
@@ -619,6 +615,7 @@ bool CApakrPlugin::UploadDataPack(const std::string &UploadURL, const std::strin
         {
             Msg("\x1B[94m[Apakr]: \x1b[97mReceived an invalid response code [%ld] while uploading.\n", HTTPCode);
             Msg("\x1B[94m[Apakr]: \x1b[97mBody: %s\n", LastHTTPResponse.data());
+            Msg("\x1B[94m[Apakr]: \x1b[97mIP: %s\n", ServerIP.data());
 
             return false;
         }
@@ -753,8 +750,8 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     CUtlBuffer *FileContents = new CUtlBuffer();
     std::vector<std::string> PreviousPacks;
     std::string OutputBuffer;
-    Bootil::AutoBuffer EncryptedDataPack;
-    Bootil::AutoBuffer DataPack(NeededSize);
+    Bootil::_AutoBuffer EncryptedDataPack;
+    Bootil::_AutoBuffer DataPack(NeededSize);
 
     CApakrPlugin::Singleton->CurrentPackKey = PackKey;
     CApakrPlugin::Singleton->PackedFiles = 0;
@@ -817,15 +814,15 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     std::vector<uint8_t> CompressedData =
         GModDataPackProxy::Singleton.Compress((uint8_t *)DataPack.GetBase(), DataPack.GetSize());
 
-    Bootil::AutoBuffer CompressedDataPack(CompressedData.size());
+    Bootil::_AutoBuffer CompressedDataPack((int)CompressedData.size());
 
-    CompressedDataPack.Write(CompressedData.data(), CompressedData.size());
+    CompressedDataPack.Write(CompressedData.data(), (uint)CompressedData.size());
     Apakr_Encrypt(CompressedDataPack, EncryptedDataPack, CApakrPlugin::Singleton->CurrentPackKey);
 
     std::vector<uint8_t> BZ2Data =
         GModDataPackProxy::Singleton.BZ2((uint8_t *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
 
-    FileContents->Put(BZ2Data.data(), BZ2Data.size());
+    FileContents->Put(BZ2Data.data(), (int)BZ2Data.size());
 
     const char *FileName = g_pFullFileSystem->FindFirst("data/apakr/*", &FindHandle);
 
@@ -852,8 +849,6 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     g_pFullFileSystem->CreateDirHierarchy(FilePath.c_str(), "GAME");
     FilePath.append(CApakrPlugin::Singleton->CurrentPackName).append(".bsp.bz2");
     g_pFullFileSystem->WriteFile(FilePath.c_str(), "GAME", *FileContents);
-
-    delete FileContents;
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FilePath.c_str(), "rb", "GAME");
 
@@ -887,6 +882,8 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     CApakrPlugin::Singleton->Packing = false;
     CApakrPlugin::Singleton->PackReady = true;
+
+    delete FileContents;
 }
 
 void CApakrPlugin::BuildAndWriteDataPack()
@@ -925,7 +922,7 @@ void CApakrPlugin::SetupDL(const std::string &FilePath, const std::string &Previ
 
     if (g_pDownloadables->FindStringIndex(TrimmedFilePath.c_str()) == INVALID_STRING_INDEX)
     {
-        g_pDownloadables->AddString(true, TrimmedFilePath.c_str(), TrimmedFilePath.size());
+        g_pDownloadables->AddString(true, TrimmedFilePath.c_str(), (int)TrimmedFilePath.size());
 
         Msg("\x1B[94m[Apakr]: \x1B[97mServing data pack \x1B[96m%s \x1B[97mvia \x1B[93mFastDL\x1B[97m.\n",
             TrimmedFilePath.c_str());
@@ -1130,7 +1127,7 @@ std::string GModDataPackProxy::Decompress(const uint8_t *Input, int Size)
 
 std::vector<uint8_t> GModDataPackProxy::Compress(const std::string &Input)
 {
-    return this->Compress((uint8_t *)Input.data(), Input.size() + 1);
+    return this->Compress((uint8_t *)Input.data(), (int)Input.size() + 1);
 }
 
 std::vector<uint8_t> GModDataPackProxy::BZ2(const uint8_t *Input, int Size)
@@ -1178,15 +1175,15 @@ void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
     if (CompressedBuffer.empty())
         return;
 
-    int BufferSize = 1 + 32 + CompressedBuffer.size() + 4 + 2;
+    int BufferSize = 1 + 32 + (int)CompressedBuffer.size() + 4 + 2;
 
     std::vector<uint8_t> Buffer(BufferSize, 0);
-    bf_write Writer("Apakr SendDataPackFile Buffer", Buffer.data(), Buffer.size());
+    bf_write Writer("Apakr SendDataPackFile Buffer", Buffer.data(), (int)Buffer.size());
 
     Writer.WriteByte(4);
     Writer.WriteWord(FileID);
-    Writer.WriteBytes(Entry.SHA256.data(), Entry.SHA256.size());
-    Writer.WriteBytes(CompressedBuffer.data(), CompressedBuffer.size());
+    Writer.WriteBytes(Entry.SHA256.data(), (int)Entry.SHA256.size());
+    Writer.WriteBytes(CompressedBuffer.data(), (int)CompressedBuffer.size());
     g_pVEngineServer->GMOD_SendToClient(Client, Writer.GetData(), Writer.GetNumBitsWritten());
 }
 
@@ -1273,9 +1270,9 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
 
     Writer.WriteByte(1);
     Writer.WriteString(FilePath.data());
-    Writer.WriteLong(SHA256.size() + FileBuffer.size());
-    Writer.WriteBytes(SHA256.data(), SHA256.size());
-    Writer.WriteBytes(FileBuffer.data(), FileBuffer.size());
+    Writer.WriteLong((int)SHA256.size() + (int)FileBuffer.size());
+    Writer.WriteBytes(SHA256.data(), (int)SHA256.size());
+    Writer.WriteBytes(FileBuffer.data(), (int)FileBuffer.size());
 
     if (!Writer.IsOverflowed())
         Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data_New, Writer.GetNumBitsWritten());
