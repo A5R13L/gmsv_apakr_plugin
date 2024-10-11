@@ -8,51 +8,51 @@
 #include <algorithm>
 #include <numeric>
 
-// Key is the current encryption Key (64 characters of HexString)
+// Key is the current encryption key (64 characters of hex)
 
 inline const char *APAKR_DECRYPTION_FUNCTION = R"(
 	local KeyLength = #Key
 
 	// https://github.com/philanc/plc/blob/master/plc/rc4.lua
 
-	local function RC4(Key, plain)
-		local function step(Buffer, Index, Value)
-			Index = bit.band(Index + 1, 0xff)
-			local ii = Index + 1
-			Value = bit.band(Value + Buffer[ii], 0xff)
-			local jj = Value + 1
-			Buffer[ii], Buffer[jj] = Buffer[jj], Buffer[ii]
-			local K = Buffer[bit.band(Buffer[ii] + Buffer[jj], 0xff) + 1]
+	local function RC4(key, plain)
+		local function step(s, i, j)
+			i = bit.band(i + 1, 0xff)
+			local ii = i + 1
+			j = bit.band(j + s[ii], 0xff)
+			local jj = j + 1
+			s[ii], s[jj] = s[jj], s[ii]
+			local k = s[bit.band(s[ii] + s[jj], 0xff) + 1]
 
-			return Buffer, Index, Value, K
+			return s, i, j, k
 		end
 
-		local function keysched(Key)
-			local Buffer = {}
-			local Value, ii, jj = 0
+		local function keysched(key)
+			local s = {}
+			local j, ii, jj = 0
 
-			for Index = 0, 255 do
-				Buffer[Index + 1] = Index
+			for i = 0, 255 do
+				s[i + 1] = i
 			end
 
-			for Index = 0, 255 do
-				ii = Index + 1
-				Value = bit.band(Value + Buffer[ii] + string.byte(Key, (Index % 32) + 1), 0xff)
-				jj = Value + 1
-				Buffer[ii], Buffer[jj] = Buffer[jj], Buffer[ii]
+			for i = 0, 255 do
+				ii = i + 1
+				j = bit.band(j + s[ii] + string.byte(key, (i % 32) + 1), 0xff)
+				jj = j + 1
+				s[ii], s[jj] = s[jj], s[ii]
 			end
 
-			return Buffer
+			return s
 		end
 
-		local Buffer = keysched(Key)
-		local Index, Value = 0, 0
-		local K
+		local s = keysched(key)
+		local i, j = 0, 0
+		local k
 		local Output = {}
 
 		for n = 1, #plain do
-			Buffer, Index, Value, K = step(Buffer, Index, Value)
-			Output[n] = string.char(bit.bxor(string.byte(plain, n), K))
+			s, i, j, k = step(s, i, j)
+			Output[n] = string.char(bit.bxor(string.byte(plain, n), k))
 		end
 
 		return table.concat(Output)
