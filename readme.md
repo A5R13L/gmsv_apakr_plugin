@@ -4,8 +4,8 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
 
 ### Installation Steps
 
-* Download the respective plugin for your server. Rename it to `gmsv_apakr_plugin.so`, and place it in `lua/bin/` (Create the folder if it doesn't exist).
-    * Ensure you use the proper version for your server's architecture. You can run `lua_run print((system.IsLinux() and "Linux" or "Unsupported") .. " (" .. (jit.arch == "x64" and "64" or "32") .." bit)")` in the server console to see which version you need.
+* Download the respective plugin for your server. Rename it to `gmsv_apakr_plugin.so` if on `linux`, or `gmsv_apakr_plugin.dl` if on `windows`, and place it in `lua/bin/` (Create the folder if it doesn't exist).
+    * Ensure you use the proper version for your server's architecture. You can run `lua_run print((system.IsLinux() and ("gmsv_apakr_plugin_" .. (jit.arch == "x64" and "64" or "32") .. ".so") or system.IsWindows() and ("gmsv_apakr_plugin_" .. (jit.arch == "x64" and "64" or "32") .. ".dll")) or "Unsupported")` in the server console to see which version you need.
 * Create a file in `addons` named `apakr.vdf` and write:
     ```vdf
     Plugin
@@ -13,6 +13,14 @@ A Garry's Mod server plugin that speeds up Lua File downloading by packing every
         file "lua/bin/gmsv_apakr_plugin.so"
     }
     ```
+if on `linux`, or:
+    ```vdf
+    Plugin
+    {
+        file "lua/bin/gmsv_apakr_plugin.dll"
+    }
+    ```
+if on `windows`.
 
 ### Differences
 
