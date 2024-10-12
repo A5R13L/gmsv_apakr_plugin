@@ -67,12 +67,11 @@ jobs:
           Invoke-WebRequest -Uri 'https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip' -OutFile premake5.zip
           Expand-Archive premake5.zip -DestinationPath premake5
           premake5/premake5.exe vs2022
-          curl -LO https://aka.ms/vcpkg-init.cmd && .\vcpkg-init.cmd
-          Push-Location -Path "$Env:USERPROFILE\.vcpkg"
-          vcpkg.exe pull packages curl --triplet=x86-windows-static
-          vcpkg.exe install curl[ssl]:x86-windows-static
-          vcpkg.exe integrate install
-          Pop-Location
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg
+          .\bootstrap-vcpkg.bat
+          .\vcpkg.exe install curl[ssl]:x86-windows-static
+          .\vcpkg.exe integrate install
           $Env:LINK='crypt32.lib secur32.lib'
           cd projects/x32/windows/vs2022
           msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
