@@ -113,5 +113,5 @@ jobs:
           repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
-          file: projects/x64/windows/vs2022/x64/ReleaseWithSymbols/gmsv_apakr_64_win64.dll
+          file: projects/x64/windows/vs2022/x86_64/ReleaseWithSymbols/gmsv_apakr_64_win64.dll
           asset_name: gmsv_apakr_plugin_64.dll
