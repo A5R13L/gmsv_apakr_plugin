@@ -72,6 +72,7 @@ jobs:
           .\bootstrap-vcpkg.bat
           .\vcpkg.exe install curl[ssl]:x86-windows-static
           .\vcpkg.exe integrate install
+          cd ..
           $Env:LINK='crypt32.lib secur32.lib'
           cd projects/x32/windows/vs2022
           msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
