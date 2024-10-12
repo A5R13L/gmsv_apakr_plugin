@@ -15,6 +15,7 @@
 #include <recipientfilter.h>
 #include <nlohmann/json.hpp>
 #include <Bootil/Bootil.h>
+#include <GarrysMod/Lua/LuaShared.h>
 #include <apakr/convar.h>
 #include <bzip2/bzlib.h>
 #include <inetchannel.h>
@@ -32,297 +33,87 @@
 
 #define BZ2_DEFAULT_BLOCKSIZE100k 9
 #define BZ2_DEFAULT_WORKFACTOR 0
-#define GMOD_LUASHARED_INTERFACE "LUASHARED003"
 
 using Time = std::chrono::system_clock::time_point;
-using _32CharArray = std::array<char, 32>;
+using _32CharArray = std::array<uint8_t, 32>;
+using luaL_loadbufferx_t = decltype(&luaL_loadbufferx);
 
-struct Template
-{
-    std::string Pattern;
-    std::string Replacement;
-};
+std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
-namespace GarrysMod
-{
-namespace Lua
-{
-class ILuaInterface;
+#if defined SYSTEM_LINUX
 
-namespace State
-{
-enum
-{
-    CLIENT = 0,
-    SERVER,
-    MENU
-};
-} // namespace State
-
-class ILuaShared
-{
-  public:
-    virtual ~ILuaShared() = 0;
-    virtual void Init(void *(*)(const char *, int *), bool, CSteamAPIContext *, IGet *) = 0;
-    virtual void Shutdown() = 0;
-    virtual void DumpStats() = 0;
-    virtual ILuaInterface *CreateLuaInterface(unsigned char, bool) = 0;
-    virtual void CloseLuaInterface(ILuaInterface *) = 0;
-    virtual ILuaInterface *GetLuaInterface(unsigned char) = 0;
-    virtual void *LoadFile(const std::string &path, const std::string &pathId, bool fromDatatable, bool fromFile) = 0;
-    virtual void *GetCache(const std::string &);
-    virtual void MountLua(const char *) = 0;
-    virtual void MountLuaAdd(const char *, const char *) = 0;
-    virtual void UnMountLua(const char *) = 0;
-    virtual void SetFileContents(const char *, const char *) = 0;
-    virtual void SetLuaFindHook(void *) = 0;
-    virtual void FindScripts(const std::string &, const std::string &, std::vector<std::string> &) = 0;
-    virtual const char *GetStackTraces() = 0;
-    virtual void InvalidateCache(const std::string &) = 0;
-    virtual void EmptyCache() = 0;
-};
-} // namespace Lua
-} // namespace GarrysMod
-
-extern IServer *g_pServer;
-extern IVEngineServer *g_pVEngineServer;
-extern CNetworkStringTableContainer *g_pNetworkStringTableContainer;
-extern CNetworkStringTable *g_pClientLuaFiles;
-extern CNetworkStringTable *g_pDownloadables;
-extern GarrysMod::Lua::ILuaShared *g_pILuaShared;
-extern GarrysMod::Lua::ILuaInterface *g_pLUAServer;
-
-template <typename Return> inline Return TimeSince(const Time &When)
-{
-    Time Now = std::chrono::system_clock::now();
-
-    if (When.time_since_epoch().count() == 0)
-        return Return(0);
-
-    return std::chrono::duration_cast<Return>(Now - When);
-}
-
-inline std::string PaddedHex(const int &Number, const int &Padding)
-{
-    std::ostringstream Stream;
-
-    Stream << std::hex << std::setw(Padding) << std::setfill('0') << Number;
-
-    return Stream.str();
-}
-
-inline std::string ReplaceAll(std::string &Input, const std::string &Replace, const std::string &With)
-{
-    if (Input.empty() || Replace.empty())
-        return Input;
-
-    size_t Position = 0;
-
-    while ((Position = Input.find(Replace, Position)) != std::string::npos)
-    {
-        Input.replace(Position, Replace.length(), With);
-
-        Position += With.length();
-    }
-
-    return Input;
-}
-
-inline std::string HumanSize(double Bytes)
-{
-    static const char *Units[] = {"B", "KB", "MB"};
-    int Index = 0;
-
-    while (Bytes >= 1024 && Index < 2)
-    {
-        Bytes /= 1024;
-        Index++;
-    }
-
-    std::ostringstream Stream;
-
-    Stream << std::fixed << std::setprecision(1) << Bytes << " " << Units[Index];
-
-    return Stream.str();
-}
-
-inline double PercentageDifference(const double &UnpackedSize, const double &PackedSize)
-{
-    if (UnpackedSize == 0)
-        return PackedSize == 0 ? 0 : 100;
-
-    return ((PackedSize - UnpackedSize) / UnpackedSize) * 100;
-}
-
-inline std::string GetIPAddress()
-{
-    static ConVar *ip = g_pCVar->FindVar("ip");
-
-    if (!ip)
-        return "";
-
-#if defined(APAKR_32_SERVER)
-    return ip->GetString();
-#else
-    return ip->Get<const char *>();
-#endif
-}
-
-inline bool IsBridgedInterface()
-{
-    static std::string IPAddress = GetIPAddress();
-
-    return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(0, 3) != "10." &&
-           IPAddress.substr(0, 4) != "172." && IPAddress.substr(0, 4) != "192.";
-}
-
-static SymbolFinder Finder;
-
-template <class T> inline T ResolveSymbol(const SourceSDK::FactoryLoader &Loader, const Symbol &Symbol)
-{
-    if (Symbol.type == Symbol::Type::None)
-        return nullptr;
-
-    auto Pointer = (uint8_t *)(Finder.Resolve(Loader.GetModule(), Symbol.name.c_str(), Symbol.length, nullptr));
-
-    if (Pointer)
-        Pointer += Symbol.offset;
-
-    return reinterpret_cast<T>(Pointer);
-}
-
-template <class T> inline T ResolveSymbols(const SourceSDK::FactoryLoader &Loader, const std::vector<Symbol> &Symbols)
-{
-    for (const auto &Symbol : Symbols)
-    {
-        T Return = ResolveSymbol<T>(Loader, Symbol);
-
-        if (Return)
-            return Return;
-    }
-
-    return nullptr;
-}
-
-inline void CloneFile(const std::string &CurrentPath, const std::filesystem::path &FullPath)
-{
-    try
-    {
-        std::filesystem::create_directories(FullPath.parent_path());
-    }
-    catch (std::filesystem::filesystem_error &Error)
-    {
-    }
-
-    char FullPathBuffer[512];
-
-    if (g_pFullFileSystem->RelativePathToFullPath(CurrentPath.c_str(), "GAME", FullPathBuffer, sizeof(FullPathBuffer)))
-        try
-        {
-            Msg("\x1B[94m[Apakr]: \x1B[97mCloning \x1B[93m%s \x1B[97mto \x1B[93m%s\x1B[97m.\n", FullPathBuffer,
-                FullPath.c_str());
-
-            std::filesystem::copy_file(FullPathBuffer, FullPath);
-        }
-        catch (std::filesystem::filesystem_error &Error)
-        {
-        }
-}
-
-static int BarSize = 40;
-static double LastPercentage = -1;
-
-inline void DisplayProgressBar(const double &Percentage)
-{
-    int Progress = BarSize * Percentage;
-
-    if (LastPercentage == Progress)
-        return;
-
-    LastPercentage = Progress;
-
-    Msg("\x1B[94m[Apakr]: \x1b[97m[\x1B[91m");
-
-    for (int Index = 0; Index < BarSize; ++Index)
-        if (Index < Progress)
-            Msg("=");
-        else
-            Msg(" ");
-
-    Msg("\x1b[97m] %.2f%%\n", Percentage * 100);
-}
-
-inline const char *GetConvarString(ConVar *CVar)
-{
 #if defined ARCHITECTURE_X86
-    return CVar->GetString();
-#else
-    return CVar->Get<const char *>();
-#endif
-}
 
-inline void InstallConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
-{
+    Symbol::FromName("_ZN14CVEngineServer17GMOD_SendToClientEP16IRecipientFilterPvi")
+
+#else
+
+    Symbol::FromSignature("\x55\x48\x89\xE5\x41\x57\x49\x89\xD7\x41\x56\x49\x89\xF6\x41\x55\x41\x54")
+
+#endif
+
+#elif defined SYSTEM_WINDOWS
+
 #if defined ARCHITECTURE_X86
-    CVar->InstallChangeCallback(Callback);
+
+    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x44\x56\x8D\x4D\xD0\xC6\x45\xC0\x01")
+
 #else
-    CVar->InstallChangeCallback(Callback, false);
-#endif
-}
 
-inline void RemoveConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
-{
-#if defined ARCHITECTURE_X86
-    ((HackedConVar *)CVar)->m_fnChangeCallback = nullptr;
-#else
-    CVar->RemoveChangeCallback(Callback);
-#endif
-}
+    Symbol::FromSignature(
+        "\x4C\x8B\xDC\x49\x89\x5B\x08\x49\x89\x73\x10\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24\x2A\x2A")
 
-class GModDataPack;
-
-#if defined(APAKR_32_SERVER)
-inline IFileSystem *g_pFullFileSystem = nullptr;
 #endif
+
+#endif
+
+};
 
 struct GmodDataPackFile
 {
     int time;
+
+#if defined SYSTEM_LINUX
+
     const char *name;
     const char *source;
     const char *contents;
-    Bootil::AutoBuffer compressed;
+
+#elif defined SYSTEM_WINDOWS
+
+    std::string name;
+    std::string source;
+    std::string contents;
+
+#endif
+
+    Bootil::_AutoBuffer compressed;
     unsigned int timesloadedserver;
     unsigned int timesloadedclient;
 };
 
 struct GmodPlayer
 {
-    IClient *Client = nullptr;
-    bool LoadingIn = false;
+    IClient *Client;
+    bool LoadingIn;
 
-    GmodPlayer()
+    GmodPlayer() : Client(nullptr), LoadingIn(false)
     {
     }
 
-    GmodPlayer(IClient *_Client, bool _LoadingIn)
+    GmodPlayer(IClient *Client, bool LoadingIn) : Client(Client), LoadingIn(LoadingIn)
     {
-        this->Client = _Client;
-        this->LoadingIn = _LoadingIn;
     }
 };
 
 struct DataPackEntry
 {
-    std::string FilePath = "";
-    std::string Contents = "";
-    int Size = 0;
-    std::string OriginalContents = "";
-    int OriginalSize = 0;
+    std::string FilePath, Contents, OriginalContents;
+    int Size, OriginalSize;
     _32CharArray SHA256 = {};
-    std::vector<char> CompressedContents = {};
+    std::vector<uint8_t> CompressedContents = {};
 
-    DataPackEntry(){};
+    DataPackEntry() : Size(0), OriginalSize(0){};
 
     DataPackEntry(const std::string &EntryFilePath, const std::string &EntryContents,
                   const std::string &EntryOriginalContents);
@@ -330,12 +121,18 @@ struct DataPackEntry
 
 struct FileEntry
 {
-    std::string Contents = "";
-    int Size = 0;
-    char *SHA256 = nullptr;
+    std::string Contents;
+    int Size;
+    uint8_t *SHA256;
 
-    FileEntry(){};
+    FileEntry() : Size(0), SHA256(nullptr){};
     FileEntry(const std::string &EntryContents, int EntrySize);
+};
+
+struct Template
+{
+    std::string Pattern;
+    std::string Replacement;
 };
 
 class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
@@ -343,28 +140,20 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
   public:
     static CApakrPlugin *Singleton;
 
-    double UnpackedSize = 0;
-    double PackedSize = 0;
-    int PackedFiles = 0;
-    std::string CurrentPackName = "";
-    std::string CurrentPackSHA256 = "";
-    std::string CurrentPackKey = "";
-    std::string TemplatePath = "";
-    std::filesystem::file_time_type LastTemplateEdit;
     std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
-    std::vector<GmodPlayer *> Players;
-    bool Ready = false;
-    bool PackReady = false;
-    bool NeedsRepack = false;
-    bool Packing = false;
-    bool FailedUpload = false;
-    bool Disabled = false;
-    bool WasDisabled = false;
+    bool Loaded, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled;
+    std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath;
     std::unordered_map<std::string, FileEntry> FileMap;
-    std::map<int, DataPackEntry> DataPackMap;
+    std::filesystem::file_time_type LastTemplateEdit;
     std::vector<Template> PreprocessorTemplates;
+    std::map<int, DataPackEntry> DataPackMap;
+    double UnpackedSize, PackedSize;
+    std::vector<GmodPlayer *> Players;
+    int PackedFiles;
 
-    CApakrPlugin(){};
+    CApakrPlugin()
+        : Loaded(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false), FailedUpload(false),
+          Disabled(false), WasDisabled(false), UnpackedSize(0), PackedSize(0), PackedFiles(0){};
     ~CApakrPlugin(){};
 
     virtual bool Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory);
@@ -407,7 +196,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     virtual void OnEdictFreed(const edict_t *EDict){};
     virtual void FireGameEvent(IGameEvent *Event){};
     void CheckForRepack();
-    Bootil::AutoBuffer GetDataPackBuffer();
+    std::pair<std::string, int> GetDataPackInfo();
     void SetupClientFiles();
 
     bool UploadDataPack(const std::string &UploadURL, const std::string &Pack,
@@ -419,6 +208,8 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     void LoadPreprocessorTemplates();
 };
 
+class GModDataPack;
+
 class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPackProxy>
 {
   public:
@@ -429,15 +220,15 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
 
     bool Load();
     void Unload();
-    void AddOrUpdateFile(GmodDataPackFile *File, bool Refresh);
+    void AddOrUpdateFile(const GmodDataPackFile *File, bool Refresh);
     _32CharArray GetSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const std::string &Data);
     std::string SHA256ToHex(const _32CharArray &SHA256);
-    std::vector<char> Compress(char *Input, int Size);
-    std::vector<char> Compress(const std::string &Input);
-    std::string Decompress(char *Input, int Size);
-    std::vector<char> BZ2(char *Input, int Size);
+    std::vector<uint8_t> Compress(uint8_t *Input, int Size);
+    std::vector<uint8_t> Compress(const std::string &Input);
+    std::string Decompress(const uint8_t *Input, int Size);
+    std::vector<uint8_t> BZ2(const uint8_t *Input, int Size);
     void ProcessFile(std::string &Code);
     void SendDataPackFile(int Client, int FileID);
     void SendFileToClient(int Client, int FileID);
@@ -464,3 +255,253 @@ class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngin
   private:
     IVEngineServer_GMOD_SendFileToClient_t GMOD_SendFileToClient_Original;
 };
+
+#ifdef SYSTEM_WINDOWS
+
+void SetConsoleColor(int Color)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), Color);
+}
+
+void Msg(const char *Format, ...)
+{
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+
+    std::string Message;
+    char Buffer[1024];
+
+    vsnprintf(Buffer, sizeof(Buffer), Format, Arguments);
+
+    Message = std::string(Buffer);
+
+    int White = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
+
+    for (size_t Index = 0; Index < Message.size(); Index++)
+    {
+        if (Message[Index] == '\x1B' && Message[Index + 1] == '[')
+        {
+            int ColorCode = 0;
+            sscanf(&Message[Index + 2], "%dm", &ColorCode);
+
+            switch (ColorCode)
+            {
+            case 91:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_INTENSITY);
+                break;
+            case 93:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+                break;
+            case 94:
+                SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            case 95:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            case 96:
+                SetConsoleColor(FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            default:
+                SetConsoleColor(White);
+                break;
+            }
+
+            while (Message[Index] != 'm' && Index < Message.size())
+                Index++;
+        }
+        else
+            std::cout << Message[Index];
+    }
+
+    va_end(Arguments);
+}
+
+#endif
+
+template <typename Return> Return TimeSince(const Time &When)
+{
+    Time Now = std::chrono::system_clock::now();
+
+    if (When.time_since_epoch().count() == 0)
+        return Return(0);
+
+    return std::chrono::duration_cast<Return>(Now - When);
+}
+
+std::string PaddedHex(const int &Number, const int &Padding)
+{
+    std::ostringstream Stream;
+
+    Stream << std::hex << std::setw(Padding) << std::setfill('0') << Number;
+
+    return Stream.str();
+}
+
+std::string ReplaceAll(std::string &Input, const std::string &Replace, const std::string &With)
+{
+    if (Input.empty() || Replace.empty())
+        return Input;
+
+    size_t Position = 0;
+
+    while ((Position = Input.find(Replace, Position)) != std::string::npos)
+    {
+        Input.replace(Position, Replace.length(), With);
+
+        Position += With.length();
+    }
+
+    return Input;
+}
+
+std::string HumanSize(double Bytes)
+{
+    static const char *Units[] = {"B", "KB", "MB"};
+    int Index = 0;
+
+    while (Bytes >= 1024 && Index < 2)
+    {
+        Bytes /= 1024;
+        Index++;
+    }
+
+    std::ostringstream Stream;
+
+    Stream << std::fixed << std::setprecision(1) << Bytes << " " << Units[Index];
+
+    return Stream.str();
+}
+
+double PercentageDifference(const double &UnpackedSize, const double &PackedSize)
+{
+    if (UnpackedSize == 0)
+        return PackedSize == 0 ? 0 : 100;
+
+    return ((PackedSize - UnpackedSize) / UnpackedSize) * 100;
+}
+
+std::string GetIPAddress()
+{
+    static ConVar *ip = g_pCVar->FindVar("ip");
+
+    if (!ip)
+        return "";
+
+#if defined(APAKR_32_SERVER)
+    return ip->GetString();
+#else
+    return ip->Get<const char *>();
+#endif
+}
+
+bool IsBridgedInterface()
+{
+    static std::string IPAddress = GetIPAddress();
+
+    return IPAddress != "localhost" && IPAddress != "0.0.0.0" && IPAddress.substr(0, 3) != "10." &&
+           IPAddress.substr(0, 4) != "172." && IPAddress.substr(0, 4) != "192.";
+}
+
+static SymbolFinder Finder;
+
+template <class T> T ResolveSymbol(const SourceSDK::FactoryLoader &Loader, const Symbol &Symbol)
+{
+    if (Symbol.type == Symbol::Type::None)
+        return nullptr;
+
+    uint8_t *Pointer = (uint8_t *)(Finder.Resolve(Loader.GetModule(), Symbol.name.c_str(), Symbol.length, nullptr));
+
+    if (Pointer)
+        Pointer += Symbol.offset;
+
+    return reinterpret_cast<T>(Pointer);
+}
+
+template <class T> T ResolveSymbols(const SourceSDK::FactoryLoader &Loader, const std::vector<Symbol> &Symbols)
+{
+    for (const Symbol &Symbol : Symbols)
+    {
+        T Return = ResolveSymbol<T>(Loader, Symbol);
+
+        if (Return)
+            return Return;
+    }
+
+    return nullptr;
+}
+
+void CloneFile(const std::string &CurrentPath, const std::filesystem::path &FullPath)
+{
+    try
+    {
+        std::filesystem::create_directories(FullPath.parent_path());
+    }
+    catch (std::filesystem::filesystem_error &_)
+    {
+    }
+
+    char FullPathBuffer[512];
+
+    if (g_pFullFileSystem->RelativePathToFullPath(CurrentPath.c_str(), "GAME", FullPathBuffer, sizeof(FullPathBuffer)))
+        try
+        {
+            Msg("\x1B[94m[Apakr]: \x1B[97mCloning \x1B[93m%s \x1B[97mto \x1B[93m%s\x1B[97m.\n", FullPathBuffer,
+                FullPath.c_str());
+
+            std::filesystem::copy_file(FullPathBuffer, FullPath);
+        }
+        catch (std::filesystem::filesystem_error &_)
+        {
+        }
+}
+
+int BarSize = 40;
+double LastPercentage = -1;
+
+void DisplayProgressBar(const double &Percentage)
+{
+    int Progress = BarSize * Percentage;
+
+    if (LastPercentage == Progress)
+        return;
+
+    LastPercentage = Progress;
+
+    Msg("\x1B[94m[Apakr]: \x1b[97m[\x1B[91m");
+
+    for (int Index = 0; Index < BarSize; ++Index)
+        if (Index < Progress)
+            Msg("=");
+        else
+            Msg(" ");
+
+    Msg("\x1b[97m] %.2f%%\n", Percentage * 100);
+}
+
+const char *GetConvarString(ConVar *CVar)
+{
+#if defined ARCHITECTURE_X86
+    return CVar->GetString();
+#else
+    return CVar->Get<const char *>();
+#endif
+}
+
+void InstallConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
+{
+#if defined ARCHITECTURE_X86
+    CVar->InstallChangeCallback(Callback);
+#else
+    CVar->InstallChangeCallback(Callback, false);
+#endif
+}
+
+void RemoveConvarChangeCallback(ConVar *CVar, FnChangeCallback_t Callback)
+{
+#if defined ARCHITECTURE_X86
+    ((HackedConVar *)CVar)->m_fnChangeCallback = nullptr;
+#else
+    CVar->RemoveChangeCallback(Callback);
+#endif
+}

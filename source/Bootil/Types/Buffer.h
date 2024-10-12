@@ -80,12 +80,12 @@ namespace Bootil
 			unsigned int		m_iWritten;
 	};
 
-	class BOOTIL_EXPORT AutoBuffer : public Buffer
+	class BOOTIL_EXPORT _AutoBuffer : public Buffer
 	{
 		public:
 
-			AutoBuffer( int iInitialSize = 32 );
-			virtual ~AutoBuffer();
+			_AutoBuffer( int iInitialSize = 32 );
+			virtual ~_AutoBuffer();
 
 			//
 			// Clears everything, frees the data, sets everything to 0.
