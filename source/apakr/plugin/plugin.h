@@ -56,7 +56,7 @@ std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
 #if defined ARCHITECTURE_X86
 
-    Symbol::FronSignature("")
+    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x44\x56\x8D\x4D\xD0\xC6\x45\xC0\x01")
 
 #else
 
