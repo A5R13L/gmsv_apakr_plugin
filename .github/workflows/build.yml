@@ -64,14 +64,16 @@ jobs:
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
         run: |
-          Invoke-WebRequest -Uri https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip -OutFile premake5.zip
+          Invoke-WebRequest -Uri 'https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip' -OutFile premake5.zip
           Expand-Archive premake5.zip -DestinationPath premake5
           premake5/premake5.exe vs2022
           cmd.exe .
           curl -LO https://aka.ms/vcpkg-init.cmd && .\vcpkg-init.cmd
-          %USERPROFILE%\.vcpkg\vcpkg-init.cmd install curl[ssl]:x86-windows-static
-          %USERPROFILE%\.vcpkg\vcpkg-init.cmd integrate install
-          set LINK=crypt32.lib secur32.lib
+          Push-Location -Path "$Env:USERPROFILE\.vcpkg"
+          vcpkg.exe install curl[ssl]:x86-windows-static
+          vcpkg.exe integrate install
+          Pop-Location
+          $Env:LINK='crypt32.lib secur32.lib'
           cd projects/x32/windows/vs2022
           msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
       - name: Release
