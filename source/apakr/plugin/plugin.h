@@ -52,19 +52,6 @@ std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 
 #endif
 
-#elif defined SYSTEM_WINDOWS
-
-#if defined ARCHITECTURE_X86
-
-    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x44\x56\x8D\x4D\xD0\xC6\x45\xC0\x01")
-
-#else
-
-    Symbol::FromSignature(
-        "\x4C\x8B\xDC\x49\x89\x5B\x08\x49\x89\x73\x10\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24\x2A\x2A")
-
-#endif
-
 #endif
 
 };
@@ -141,8 +128,8 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     static CApakrPlugin *Singleton;
 
     std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
-    bool Loaded, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled;
-    std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath;
+    bool Loaded, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled, NeedsDLSetup;
+    std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath, PreviousDLPath, CurrentDLPath;
     std::unordered_map<std::string, FileEntry> FileMap;
     std::filesystem::file_time_type LastTemplateEdit;
     std::vector<Template> PreprocessorTemplates;
@@ -153,7 +140,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
 
     CApakrPlugin()
         : Loaded(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false), FailedUpload(false),
-          Disabled(false), WasDisabled(false), UnpackedSize(0), PackedSize(0), PackedFiles(0){};
+          Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0), PackedFiles(0){};
     ~CApakrPlugin(){};
 
     virtual bool Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory);
@@ -205,6 +192,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     bool CanDownloadPack(const std::string &DownloadURL);
     void BuildAndWriteDataPack();
     void SetupDL(const std::string &FilePath, const std::string &PreviousPath);
+    void CheckDLSetup();
     void LoadPreprocessorTemplates();
 };
 
@@ -250,7 +238,15 @@ class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngin
 
     bool Load();
     void Unload();
-    void GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
+    void
+
+#ifdef SYSTEM_WINDOWS &&ARCHITECTURE_X86
+
+        __stdcall
+
+#endif
+
+        GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
 
   private:
     IVEngineServer_GMOD_SendFileToClient_t GMOD_SendFileToClient_Original;

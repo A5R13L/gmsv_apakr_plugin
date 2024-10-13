@@ -263,6 +263,7 @@ void CApakrPlugin::GameFrame(bool Simulating)
         return;
 
     this->CheckForRepack();
+    this->CheckDLSetup();
 
     if (this->CurrentPackName != GetConvarString(apakr_file))
         apakr_file->SetValue(this->CurrentPackName.c_str());
@@ -405,9 +406,9 @@ void CApakrPlugin::SetupClientFiles()
         if (FileMapEntry.Contents.empty())
             continue;
 
-        if (this->Disabled)
+        if (this->Disabled && FileMapEntry.SHA256)
             g_pClientLuaFiles->SetStringUserData(Index, 32, FileMapEntry.SHA256);
-        else
+        else if (!this->Disabled)
         {
             if (this->WasDisabled)
                 g_pClientLuaFiles->SetStringUserData(Index, 32, DataPackMapEntry.SHA256.data());
@@ -755,7 +756,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     std::string OutputBuffer;
     Bootil::_AutoBuffer EncryptedDataPack;
     Bootil::_AutoBuffer DataPack(NeededSize);
-    CUtlBuffer FileContents;
+    // CUtlBuffer FileContents;
 
     CApakrPlugin::Singleton->CurrentPackKey = PackKey;
     CApakrPlugin::Singleton->PackedFiles = 0;
@@ -826,7 +827,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     std::vector<uint8_t> BZ2Data =
         GModDataPackProxy::Singleton.BZ2((uint8_t *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
 
-    FileContents.Put(BZ2Data.data(), BZ2Data.size());
+    // FileContents.Put(BZ2Data.data(), BZ2Data.size());
 
     const char *FileName = g_pFullFileSystem->FindFirst("data/apakr/*", &FindHandle);
 
@@ -852,8 +853,24 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     g_pFullFileSystem->FindClose(FindHandle);
     g_pFullFileSystem->CreateDirHierarchy(FilePath.c_str(), "GAME");
     FilePath.append(CApakrPlugin::Singleton->CurrentPackName).append(".bsp.bz2");
-    g_pFullFileSystem->WriteFile(FilePath.c_str(), "GAME", FileContents);
-    FileContents.Clear();
+
+    char RootFilePathBuffer[MAX_PATH];
+
+    if (!g_pFullFileSystem->RelativePathToFullPath_safe("garrysmod/", nullptr, RootFilePathBuffer))
+        return;
+
+    std::string RootFilePath = RootFilePathBuffer;
+
+    RootFilePath += FilePath;
+
+    std::ofstream File(RootFilePath);
+
+    if (File.is_open())
+    {
+        File << BZ2Data.data();
+
+        File.close();
+    }
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FilePath.c_str(), "rb", "GAME");
 
@@ -914,22 +931,40 @@ void CApakrPlugin::SetupDL(const std::string &FilePath, const std::string &Previ
     if (FilePath.find("bz2") != std::string::npos)
         TrimmedFilePath = FilePath.substr(0, FilePath.size() - 4);
 
-    if (g_pDownloadables->FindStringIndex(TrimmedPreviousPath.c_str()) != INVALID_STRING_INDEX)
-    {
-        g_pDownloadables->m_pItems->m_Items.Remove(TrimmedPreviousPath.c_str());
+    this->NeedsDLSetup = true;
+    this->PreviousDLPath = TrimmedPreviousPath;
+    this->CurrentDLPath = TrimmedFilePath;
+}
 
+void CApakrPlugin::CheckDLSetup()
+{
+    if (!this->NeedsDLSetup || this->Packing || !this->PackReady)
+        return;
+
+    // std::vector<std::string> Downloadables;
+
+    // Downloadables.reserve(g_pDownloadables->GetNumStrings());
+
+    // for (int Index = 1; Index < g_pDownloadables->GetNumStrings(); ++Index)
+    // Downloadables.push_back(g_pDownloadables->GetString(Index));
+
+    // g_pDownloadables->m_pItems->Purge();
+
+    // for (std::string &File : Downloadables)
+    // g_pDownloadables->AddString(true, File.data());
+
+    // g_pDownloadables->AddString(true, this->CurrentDLPath.c_str());
+
+    if (this->PreviousDLPath != "" && this->PreviousDLPath != "data/apakr/.bsp" &&
+        this->PreviousDLPath != this->CurrentDLPath)
         Msg("\x1B[94m[Apakr]: \x1B[97mRemoved \x1B[96mprevious \x1B[97mdata pack \x1B[96m%s \x1B[97mfrom "
             "\x1B[93mFastDL\x1B[97m.\n",
-            TrimmedPreviousPath.c_str());
-    }
+            this->PreviousDLPath.c_str());
 
-    if (g_pDownloadables->FindStringIndex(TrimmedFilePath.c_str()) == INVALID_STRING_INDEX)
-    {
-        g_pDownloadables->AddString(true, TrimmedFilePath.c_str(), (int)TrimmedFilePath.size());
+    Msg("\x1B[94m[Apakr]: \x1B[97mServing data pack \x1B[96m%s \x1B[97mvia \x1B[93mFastDL\x1B[97m.\n",
+        this->CurrentDLPath.c_str());
 
-        Msg("\x1B[94m[Apakr]: \x1B[97mServing data pack \x1B[96m%s \x1B[97mvia \x1B[93mFastDL\x1B[97m.\n",
-            TrimmedFilePath.c_str());
-    }
+    this->NeedsDLSetup = false;
 }
 
 void CApakrPlugin::LoadPreprocessorTemplates()
@@ -1033,7 +1068,7 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
     if (Refresh)
         Msg("\x1B[94m[Apakr]: \x1B[97mAutorefresh: \x1B[93m%s\x1B[97m. Rebuilding data pack...\n", FileName.c_str());
 
-    Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
+    Call(Self.AddOrUpdateFile_Original, (GmodDataPackFile *)FileContents, Refresh);
 }
 
 _32CharArray GModDataPackProxy::GetSHA256(const char *Data, size_t Length)
@@ -1236,7 +1271,15 @@ void IVEngineServerProxy::Unload()
     UnHook(this->GMOD_SendFileToClient_Original);
 }
 
-void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
+void
+
+#ifdef SYSTEM_WINDOWS &&ARCHITECTURE_X86
+
+    __stdcall
+
+#endif
+
+    IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
 {
     IVEngineServerProxy &Self = this->Singleton;
     bf_read Buffer(BF_Data, BF_Size);
