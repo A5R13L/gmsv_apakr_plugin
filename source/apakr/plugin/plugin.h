@@ -238,82 +238,11 @@ class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngin
 
     bool Load();
     void Unload();
-    void
-
-#ifdef SYSTEM_WINDOWS &&ARCHITECTURE_X86
-
-        __stdcall
-
-#endif
-
-        GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
+    void GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
 
   private:
     IVEngineServer_GMOD_SendFileToClient_t GMOD_SendFileToClient_Original;
 };
-
-#ifdef SYSTEM_WINDOWS
-
-void SetConsoleColor(int Color)
-{
-    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), Color);
-}
-
-void Msg(const char *Format, ...)
-{
-    va_list Arguments;
-
-    va_start(Arguments, Format);
-
-    std::string Message;
-    char Buffer[1024];
-
-    vsnprintf(Buffer, sizeof(Buffer), Format, Arguments);
-
-    Message = std::string(Buffer);
-
-    int White = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
-
-    for (size_t Index = 0; Index < Message.size(); Index++)
-    {
-        if (Message[Index] == '\x1B' && Message[Index + 1] == '[')
-        {
-            int ColorCode = 0;
-            sscanf(&Message[Index + 2], "%dm", &ColorCode);
-
-            switch (ColorCode)
-            {
-            case 91:
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_INTENSITY);
-                break;
-            case 93:
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
-                break;
-            case 94:
-                SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-                break;
-            case 95:
-                SetConsoleColor(FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-                break;
-            case 96:
-                SetConsoleColor(FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
-                break;
-            default:
-                SetConsoleColor(White);
-                break;
-            }
-
-            while (Message[Index] != 'm' && Index < Message.size())
-                Index++;
-        }
-        else
-            std::cout << Message[Index];
-    }
-
-    va_end(Arguments);
-}
-
-#endif
 
 template <typename Return> Return TimeSince(const Time &When)
 {

@@ -492,7 +492,8 @@ size_t WriteHeader_Callback(char *Buffer, size_t Size, size_t Items, std::map<st
 
     std::string Name = HeaderLine.substr(0, Separator);
 
-    std::transform(Name.begin(), Name.end(), Name.begin(), [](UCHAR Character) { return std::tolower(Character); });
+    std::transform(Name.begin(), Name.end(), Name.begin(),
+                   [](unsigned char Character) { return std::tolower(Character); });
 
     (*Headers)[Name] = HeaderLine.substr(Separator + 2);
 
@@ -1068,7 +1069,7 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
     if (Refresh)
         Msg("\x1B[94m[Apakr]: \x1B[97mAutorefresh: \x1B[93m%s\x1B[97m. Rebuilding data pack...\n", FileName.c_str());
 
-    Call(Self.AddOrUpdateFile_Original, (GmodDataPackFile *)FileContents, Refresh);
+    Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
 }
 
 _32CharArray GModDataPackProxy::GetSHA256(const char *Data, size_t Length)
@@ -1271,15 +1272,7 @@ void IVEngineServerProxy::Unload()
     UnHook(this->GMOD_SendFileToClient_Original);
 }
 
-void
-
-#ifdef SYSTEM_WINDOWS &&ARCHITECTURE_X86
-
-    __stdcall
-
-#endif
-
-    IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
+void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
 {
     IVEngineServerProxy &Self = this->Singleton;
     bf_read Buffer(BF_Data, BF_Size);
