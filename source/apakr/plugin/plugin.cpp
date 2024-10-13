@@ -757,7 +757,6 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     std::string OutputBuffer;
     Bootil::_AutoBuffer EncryptedDataPack;
     Bootil::_AutoBuffer DataPack(NeededSize);
-    // CUtlBuffer FileContents;
 
     CApakrPlugin::Singleton->CurrentPackKey = PackKey;
     CApakrPlugin::Singleton->PackedFiles = 0;
@@ -827,8 +826,6 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     std::vector<uint8_t> BZ2Data =
         GModDataPackProxy::Singleton.BZ2((uint8_t *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
-
-    // FileContents.Put(BZ2Data.data(), BZ2Data.size());
 
     const char *FileName = g_pFullFileSystem->FindFirst("data/apakr/*", &FindHandle);
 
@@ -942,19 +939,19 @@ void CApakrPlugin::CheckDLSetup()
     if (!this->NeedsDLSetup || this->Packing || !this->PackReady)
         return;
 
-    // std::vector<std::string> Downloadables;
+    std::vector<std::string> Downloadables;
 
-    // Downloadables.reserve(g_pDownloadables->GetNumStrings());
+    Downloadables.reserve(g_pDownloadables->GetNumStrings());
 
-    // for (int Index = 1; Index < g_pDownloadables->GetNumStrings(); ++Index)
-    // Downloadables.push_back(g_pDownloadables->GetString(Index));
+    for (int Index = 1; Index < g_pDownloadables->GetNumStrings(); ++Index)
+        Downloadables.push_back(g_pDownloadables->GetString(Index));
 
-    // g_pDownloadables->m_pItems->Purge();
+    g_pDownloadables->m_pItems->Purge();
 
-    // for (std::string &File : Downloadables)
-    // g_pDownloadables->AddString(true, File.data());
+    for (std::string &File : Downloadables)
+        g_pDownloadables->AddString(true, File.data());
 
-    // g_pDownloadables->AddString(true, this->CurrentDLPath.c_str());
+    g_pDownloadables->AddString(true, this->CurrentDLPath.c_str());
 
     if (this->PreviousDLPath != "" && this->PreviousDLPath != "data/apakr/.bsp" &&
         this->PreviousDLPath != this->CurrentDLPath)
