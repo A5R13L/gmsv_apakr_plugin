@@ -489,7 +489,11 @@ size_t WriteHeader_Callback(char *Buffer, size_t Size, size_t Items, std::map<st
     if (Separator == std::string::npos)
         return Size * Items;
 
-    (*Headers)[HeaderLine.substr(0, Separator)] = HeaderLine.substr(Separator + 2);
+    std::string Name = HeaderLine.substr(0, Separator);
+
+    std::transform(Name.begin(), Name.end(), Name.begin(), [](UCHAR Character) { return std::tolower(Character); });
+
+    (*Headers)[Name] = HeaderLine.substr(Separator + 2);
 
     return Size * Items;
 }
@@ -747,11 +751,11 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     FileFindHandle_t FindHandle = NULL;
     auto [PackKey, NeededSize] = CApakrPlugin::Singleton->GetDataPackInfo();
     std::string CurrentFile = FilePath;
-    CUtlBuffer *FileContents = new CUtlBuffer();
     std::vector<std::string> PreviousPacks;
     std::string OutputBuffer;
     Bootil::_AutoBuffer EncryptedDataPack;
     Bootil::_AutoBuffer DataPack(NeededSize);
+    CUtlBuffer FileContents;
 
     CApakrPlugin::Singleton->CurrentPackKey = PackKey;
     CApakrPlugin::Singleton->PackedFiles = 0;
@@ -822,7 +826,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     std::vector<uint8_t> BZ2Data =
         GModDataPackProxy::Singleton.BZ2((uint8_t *)EncryptedDataPack.GetBase(), EncryptedDataPack.GetSize());
 
-    FileContents->Put(BZ2Data.data(), (int)BZ2Data.size());
+    FileContents.Put(BZ2Data.data(), BZ2Data.size());
 
     const char *FileName = g_pFullFileSystem->FindFirst("data/apakr/*", &FindHandle);
 
@@ -848,7 +852,8 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     g_pFullFileSystem->FindClose(FindHandle);
     g_pFullFileSystem->CreateDirHierarchy(FilePath.c_str(), "GAME");
     FilePath.append(CApakrPlugin::Singleton->CurrentPackName).append(".bsp.bz2");
-    g_pFullFileSystem->WriteFile(FilePath.c_str(), "GAME", *FileContents);
+    g_pFullFileSystem->WriteFile(FilePath.c_str(), "GAME", FileContents);
+    FileContents.Clear();
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FilePath.c_str(), "rb", "GAME");
 
@@ -882,8 +887,6 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     CApakrPlugin::Singleton->Packing = false;
     CApakrPlugin::Singleton->PackReady = true;
-
-    delete FileContents;
 }
 
 void CApakrPlugin::BuildAndWriteDataPack()
