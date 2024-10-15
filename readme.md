@@ -2,6 +2,9 @@
 
 A Garry's Mod server plugin that speeds up Lua File downloading by packing everything into a BSP and using FastDL to download it.
 
+### Looking To Self Host?
+You can find self-hosting solutions via [apakr-hosting](https://github.com/A5R13L/apakr-hosting/).
+
 ### Installation Steps
 
 * Download the respective plugin for your server. Rename it to `gmsv_apakr_plugin.so` if on `linux`, or `gmsv_apakr_plugin.dl` if on `windows`, and place it in `lua/bin/` (Create the folder if it doesn't exist).
