@@ -900,12 +900,11 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     RootFilePath += FilePath;
 
-    std::ofstream File(RootFilePath);
+    std::ofstream File(RootFilePath, std::ios::out | std::ios::binary);
 
     if (File.is_open())
     {
-        File << BZ2Data.data();
-
+        File.write((const char *)BZ2Data.data(), BZ2Data.size());
         File.close();
     }
 
