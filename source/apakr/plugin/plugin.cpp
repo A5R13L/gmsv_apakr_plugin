@@ -16,6 +16,8 @@ ConVar *apakr_key = nullptr;
 ConVar *apakr_clone_directory = nullptr;
 ConVar *apakr_upload_url = nullptr;
 ConVar *sv_downloadurl = nullptr;
+ConVar *apakr_activate = nullptr;
+ConVar *apakr_none = nullptr;
 bool DownloadURLChanged = false;
 bool LuaValue = false;
 std::string CurrentDownloadURL;
@@ -28,7 +30,7 @@ IFileSystem *g_pFullFileSystem = nullptr;
 
 #endif
 
-void OnCloneDirectoryChanged_Callback(ConVar *_this, const char *OldString, float OldFloat)
+void OnCloneDirectoryChanged_Callback(ConVar *, const char *, float)
 {
     if (!CApakrPlugin::Singleton->Ready || CApakrPlugin::Singleton->CurrentPackName == "")
         return;
@@ -38,7 +40,7 @@ void OnCloneDirectoryChanged_Callback(ConVar *_this, const char *OldString, floa
     CApakrPlugin::Singleton->NeedsRepack = true;
 }
 
-void OnUploadURLChanged_Callback(ConVar *_this, const char *OldString, float OldFloat)
+void OnUploadURLChanged_Callback(ConVar *, const char *, float)
 {
     if (!CApakrPlugin::Singleton->Ready || CApakrPlugin::Singleton->CurrentPackName == "")
         return;
@@ -48,7 +50,7 @@ void OnUploadURLChanged_Callback(ConVar *_this, const char *OldString, float Old
     CApakrPlugin::Singleton->NeedsRepack = true;
 }
 
-void OnDownloadURLChanged_Callback(ConVar *_this, const char *OldString, float OldFloat)
+void OnDownloadURLChanged_Callback(ConVar *, const char *, float)
 {
     if (DownloadURLChanged || !CApakrPlugin::Singleton->Ready || CApakrPlugin::Singleton->CurrentPackName == "")
         return;
@@ -57,6 +59,26 @@ void OnDownloadURLChanged_Callback(ConVar *_this, const char *OldString, float O
 
     CurrentDownloadURL = GetConvarString(sv_downloadurl);
     CApakrPlugin::Singleton->NeedsRepack = true;
+}
+
+void OnAPakrActivateChanged_Callback(ConVar *, const char *, float)
+{
+    Msg("\x1B[94m[Apakr]: \x1B[97mAttempting force activation.\n");
+
+    if (!CApakrPlugin::Singleton->Loaded)
+        return;
+
+    if (!CApakrPlugin::Singleton->Ready)
+        CApakrPlugin::Singleton->ServerActivate(nullptr, 8192, g_pServer->GetMaxClients());
+    else
+    {
+        CApakrPlugin::Singleton->LastRepack = std::chrono::system_clock::now();
+        CApakrPlugin::Singleton->NeedsRepack = true;
+    }
+}
+
+void OnApakrNoneChanged_Callback(ConVar *_this, const char *, float)
+{
 }
 
 DataPackEntry::DataPackEntry(const std::string &EntryFilePath, const std::string &EntryCode,
@@ -191,6 +213,15 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     apakr_upload_url = new ConVar("apakr_upload_url", "https://apakr.asriel.dev/", FCVAR_GAMEDLL | FCVAR_LUA_SERVER,
                                   "Custom self-hosting url.", (FnChangeCallback_t)OnUploadURLChanged_Callback);
 
+    apakr_activate =
+        new ConVar("apakr_activate", "", FCVAR_GAMEDLL | FCVAR_LUA_SERVER,
+                   "Force activates APakr if it is not running, or forces a repack. (useful for hot-loading)",
+                   (FnChangeCallback_t)OnAPakrActivateChanged_Callback);
+
+    apakr_none =
+        new ConVar("apakr_none", "", FCVAR_GAMEDLL | FCVAR_LUA_SERVER, "No use, just prevents a bug with hot-loading.",
+                   (FnChangeCallback_t)OnApakrNoneChanged_Callback);
+
     sv_downloadurl = g_pCVar->FindVar("sv_downloadurl");
 
     InstallConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged_Callback);
@@ -215,6 +246,14 @@ void CApakrPlugin::Unload()
     RemoveConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged_Callback);
     RemoveConvarChangeCallback(apakr_clone_directory, (FnChangeCallback_t)OnCloneDirectoryChanged_Callback);
     RemoveConvarChangeCallback(apakr_upload_url, (FnChangeCallback_t)OnUploadURLChanged_Callback);
+    RemoveConvarChangeCallback(apakr_activate, (FnChangeCallback_t)OnAPakrActivateChanged_Callback);
+    RemoveConvarChangeCallback(apakr_none, (FnChangeCallback_t)OnApakrNoneChanged_Callback);
+
+    if (LoadBufferXHook.IsEnabled())
+    {
+        LoadBufferXHook.Disable();
+        LoadBufferXHook.Destroy();
+    }
 
     if (g_pLUAServer)
     {

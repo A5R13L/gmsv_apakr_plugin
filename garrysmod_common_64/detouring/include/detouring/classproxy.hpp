@@ -231,6 +231,8 @@ namespace Detouring
 			const auto it = shared_state->hooks.find( reinterpret_cast<void *>( original ) );
 			if( it != shared_state->hooks.end( ) )
 			{
+				it->second.Disable();
+				it->second.Destroy();
 				shared_state->hooks.erase( it );
 				return true;
 			}

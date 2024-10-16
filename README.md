@@ -42,6 +42,8 @@ if on `windows`.
 
 > AWS & Cloudflare are both used by default which have very little, if any, downtime. Caching is also used to speed up downloads for data packs (which are already very quick to download).
 
+`apakr_activate` - You can use this to force APakr to activate if hot-loading or force a repack if needed. (The value put in does not matter)
+
 > You can change the encryption method if you want, you just need to ensure they are exactly the same on the client & server. The logic is contained in `source/apakr/plugin/encryption.h`.
 
 Please keep the credits in `source/apakr/plugin/shellcode.h`.
