@@ -128,7 +128,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     static CApakrPlugin *Singleton;
 
     std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
-    bool Loaded, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled, NeedsDLSetup;
+    bool Loaded, ChangingLevel, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled, NeedsDLSetup;
     std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath, PreviousDLPath, CurrentDLPath;
     std::unordered_map<std::string, FileEntry> FileMap;
     std::filesystem::file_time_type LastTemplateEdit;
@@ -139,7 +139,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     int PackedFiles;
 
     CApakrPlugin()
-        : Loaded(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false), FailedUpload(false),
+        : Loaded(false), ChangingLevel(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false), FailedUpload(false),
           Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0), PackedFiles(0){};
     ~CApakrPlugin(){};
 
@@ -156,7 +156,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     virtual void LevelInit(const char *Map){};
     virtual void ServerActivate(edict_t *EntityList, int EntityCount, int MaxClients);
     virtual void GameFrame(bool Simulating);
-    virtual void LevelShutdown(){};
+    virtual void LevelShutdown();
     virtual void ClientActive(edict_t *Entity);
     virtual void ClientDisconnect(edict_t *Entity);
     virtual void ClientPutInServer(edict_t *Entity, const char *Name){};

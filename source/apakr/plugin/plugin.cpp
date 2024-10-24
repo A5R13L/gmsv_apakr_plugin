@@ -294,6 +294,7 @@ void CApakrPlugin::ServerActivate(edict_t *EntityList, int EntityCount, int MaxC
 
     this->Ready = true;
     this->LastRepack = std::chrono::system_clock::now();
+    this->ChangingLevel = false;
 }
 
 void CApakrPlugin::GameFrame(bool Simulating)
@@ -337,6 +338,12 @@ void CApakrPlugin::GameFrame(bool Simulating)
         for (GmodPlayer *Player : this->Players)
             if (Player && Player->Client && Player->LoadingIn && Player->Client->IsConnected())
                 Player->Client->Reconnect();
+}
+
+void CApakrPlugin::LevelShutdown()
+{
+    this->ChangingLevel = true;
+    g_pLUAServer = nullptr;
 }
 
 void CApakrPlugin::ClientActive(edict_t *Entity)
@@ -387,7 +394,7 @@ PLUGIN_RESULT CApakrPlugin::ClientConnect(bool *AllowConnection, edict_t *Entity
 
 void CApakrPlugin::CheckForRepack()
 {
-    if (!this->Ready || !this->NeedsRepack ||
+    if (!this->Ready || this->ChangingLevel || !this->NeedsRepack ||
         TimeSince<std::chrono::seconds>(this->LastRepack) < std::chrono::seconds(1))
         return;
 
