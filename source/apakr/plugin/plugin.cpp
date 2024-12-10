@@ -92,7 +92,8 @@ DataPackEntry::DataPackEntry(const std::string &EntryFilePath, const std::string
     this->CompressedContents = GModDataPackProxy::Singleton.Compress(this->Contents);
 }
 
-FileEntry::FileEntry(const std::string &EntryContents, int EntrySize) : Contents(EntryContents), Size(EntrySize)
+FileEntry::FileEntry(const std::string &EntryContents, int EntrySize)
+    : Contents(EntryContents), Size(EntrySize), SHA256(nullptr)
 {
 }
 
