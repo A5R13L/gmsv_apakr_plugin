@@ -1283,7 +1283,6 @@ void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
         return;
 
     int BufferSize = 1 + 32 + (int)CompressedBuffer.size() + 4 + 2;
-
     std::vector<uint8_t> Buffer(BufferSize, 0);
     bf_write Writer("Apakr SendDataPackFile Buffer", Buffer.data(), (int)Buffer.size());
 
@@ -1296,7 +1295,7 @@ void GModDataPackProxy::SendDataPackFile(int Client, int FileID)
 
 void GModDataPackProxy::SendFileToClient(int Client, int FileID)
 {
-    if (CApakrPlugin::Singleton->Disabled)
+    if (!CApakrPlugin::Singleton->Ready || CApakrPlugin::Singleton->Disabled)
         return Call(this->Singleton.SendFileToClient_Original, Client, FileID);
 
     this->SendDataPackFile(Client, FileID);
