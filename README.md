@@ -7,8 +7,8 @@ You can find self-hosting solutions via [apakr-hosting](https://github.com/A5R13
 
 ### Installation Steps
 
-* Download the respective plugin for your server. Rename it to `gmsv_apakr_plugin.so` if on `linux`, and place it in `lua/bin/` (Create the folder if it doesn't exist).
-    * Ensure you use the proper version for your server's architecture. You can run `lua_run print((system.IsLinux() and ("gmsv_apakr_plugin_" .. (jit.arch == "x64" and "64" or "32") .. ".so") or "Unsupported")` in the server console to see which version you need.
+* Download the respective plugin for your server. Rename it to `gmsv_apakr_plugin.so` if on `linux`, or `gmsv_apakr_plugin.dl` if on `windows`, and place it in `lua/bin/` (Create the folder if it doesn't exist).
+    * Ensure you use the proper version for your server's architecture. You can run `lua_run print((system.IsLinux() and ("gmsv_apakr_plugin_" .. (jit.arch == "x64" and "64" or "32") .. ".so") or system.IsWindows() and ("gmsv_apakr_plugin_" .. (jit.arch == "x64" and "64" or "32") .. ".dll")) or "Unsupported")` in the server console to see which version you need.
 * Create a file in `addons` named `apakr.vdf` and write:
 ```vdf
    Plugin
@@ -16,6 +16,14 @@ You can find self-hosting solutions via [apakr-hosting](https://github.com/A5R13
       file "lua/bin/gmsv_apakr_plugin.so"
    }
 ```
+if on `linux`, or:
+```vdf
+Plugin
+   {
+      file "lua/bin/gmsv_apakr_plugin.dll"
+   }
+```
+if on `windows`.
 
 ### Differences
 
