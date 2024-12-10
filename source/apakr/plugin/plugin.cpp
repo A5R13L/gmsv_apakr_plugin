@@ -25,9 +25,7 @@ luaL_loadbufferx_t luaL_loadbufferx_Original = nullptr;
 Detouring::Hook LoadBufferXHook;
 
 #if defined APAKR_32_SERVER
-
 IFileSystem *g_pFullFileSystem = nullptr;
-
 #endif
 
 void OnCloneDirectoryChanged_Callback(ConVar *, const char *, float)
@@ -131,7 +129,21 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
         return true;
     }
 
+#if defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86_64
+    SourceSDK::FactoryLoader EngineFactoryLoader("engine");
+
+    if (!EngineFactoryLoader.IsValid())
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to get \x1B[91mengine\x1B[97m FactoryLoader!\n");
+
+        return true;
+    }
+
+    g_pServer =
+        (IServer *)GetRealAddressFromRelative(ResolveSymbols<char *>(EngineFactoryLoader, IServer_Reference), 3, 7);
+#else
     g_pServer = InterfacePointers::Server();
+#endif
 
     if (!g_pServer)
     {
@@ -342,8 +354,19 @@ void CApakrPlugin::GameFrame(bool Simulating)
 
 void CApakrPlugin::LevelShutdown()
 {
-    this->ChangingLevel = true;
     g_pLUAServer = nullptr;
+
+    this->ChangingLevel = true;
+    this->FailedUpload = false;
+    this->Disabled = false;
+    this->WasDisabled = false;
+
+    for (auto &FileMapEntry : this->FileMap)
+        if (FileMapEntry.second.SHA256)
+            delete FileMapEntry.second.SHA256;
+
+    this->FileMap.clear();
+    this->DataPackMap.clear();
 }
 
 void CApakrPlugin::ClientActive(edict_t *Entity)
@@ -1100,13 +1123,15 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FileName.c_str(), "rb", "GAME");
     int FileSize = g_pFullFileSystem->Size(Handle);
+    std::string Contents("", FileSize);
 
+    g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);
     g_pFullFileSystem->Close(Handle);
 
-    CApakrPlugin::Singleton->FileMap[FileContents->name] = FileEntry(FileContents->contents, FileSize);
+    CApakrPlugin::Singleton->FileMap[FileName] = FileEntry(Contents, FileSize);
 
-    ReplaceAll(CApakrPlugin::Singleton->FileMap[FileContents->name].Contents, "\r", "");
-    GModDataPackProxy::Singleton.ProcessFile(CApakrPlugin::Singleton->FileMap[FileContents->name].Contents);
+    ReplaceAll(CApakrPlugin::Singleton->FileMap[FileName].Contents, "\r", "");
+    GModDataPackProxy::Singleton.ProcessFile(CApakrPlugin::Singleton->FileMap[FileName].Contents);
 
     if (Refresh)
         Msg("\x1B[94m[Apakr]: \x1B[97mAutorefresh: \x1B[93m%s\x1B[97m. Rebuilding data pack...\n", FileName.c_str());
@@ -1287,21 +1312,21 @@ bool IVEngineServerProxy::Load()
         return false;
     }
 
-    this->GMOD_SendFileToClient_Original =
-        ResolveSymbols<IVEngineServer_GMOD_SendFileToClient_t>(EngineFactoryLoader, IVEngineServer_GMOD_SendToClient);
+    this->GMOD_SendFileToClients_Original =
+        ResolveSymbols<IVEngineServer_GMOD_SendFileToClients_t>(EngineFactoryLoader, IVEngineServer_GMOD_SendToClient);
 
-    if (!this->GMOD_SendFileToClient_Original)
+    if (!this->GMOD_SendFileToClients_Original)
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to allocate hook for "
-            "\x1B[91mIVEngineServer::GMOD_SendFileToClient\x1B[97m.\n");
+            "\x1B[91mIVEngineServer::GMOD_SendFileToClients\x1B[97m.\n");
 
         return false;
     }
 
-    if (!Hook(this->GMOD_SendFileToClient_Original, &IVEngineServerProxy::GMOD_SendFileToClient))
+    if (!Hook(this->GMOD_SendFileToClients_Original, &IVEngineServerProxy::GMOD_SendFileToClients))
     {
         Msg("\x1B[94m[Apakr]: \x1B[97mFailed to hook for "
-            "\x1B[91mIVEngineServerProxy::GMOD_SendFileToClient\x1B[97m.\n");
+            "\x1B[91mIVEngineServerProxy::GMOD_SendFileToClients\x1B[97m.\n");
 
         return false;
     }
@@ -1311,23 +1336,33 @@ bool IVEngineServerProxy::Load()
 
 void IVEngineServerProxy::Unload()
 {
-    UnHook(this->GMOD_SendFileToClient_Original);
+    UnHook(this->GMOD_SendFileToClients_Original);
 }
 
-void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
+void
+#if defined SYSTEM_WINDOWS && ARCHITECTURE_X86
+    __stdcall
+#endif
+    IVEngineServerProxy::GMOD_SendFileToClients(IRecipientFilter *Filter, void *BF_Data, int BF_Size)
 {
     IVEngineServerProxy &Self = this->Singleton;
+
+    if (BF_Size <= 13)
+        return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
+
     bf_read Buffer(BF_Data, BF_Size);
     int Type = Buffer.ReadByte();
 
     if (Type != 1)
-        return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
+        return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
 
     std::string FilePath = Buffer.ReadAndAllocateString();
     unsigned int Length = Buffer.ReadLong();
 
     if (Length <= 32)
-        return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
+        return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
+
+    std::cout << FilePath << std::endl;
 
     Length = Length - 32;
 
@@ -1339,7 +1374,7 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
     std::string Contents = GModDataPackProxy::Singleton.Decompress(CompressedContents.data(), Length);
 
     if (Contents == "")
-        return Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data, BF_Size);
+        return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
 
     ReplaceAll(Contents, "\r", "");
     GModDataPackProxy::Singleton.ProcessFile(Contents);
@@ -1356,7 +1391,7 @@ void IVEngineServerProxy::GMOD_SendFileToClient(IRecipientFilter *Filter, void *
     Writer.WriteBytes(FileBuffer.data(), (int)FileBuffer.size());
 
     if (!Writer.IsOverflowed())
-        Call(Self.GMOD_SendFileToClient_Original, Filter, BF_Data_New, Writer.GetNumBitsWritten());
+        Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data_New, Writer.GetNumBitsWritten());
 
     free(BF_Data_New);
 }

@@ -39,35 +39,40 @@ using _32CharArray = std::array<uint8_t, 32>;
 using luaL_loadbufferx_t = decltype(&luaL_loadbufferx);
 
 std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
-
-#if defined SYSTEM_LINUX
-
+#if defined SYSTEM_WINDOWS
 #if defined ARCHITECTURE_X86
-
-    Symbol::FromName("_ZN14CVEngineServer17GMOD_SendToClientEP16IRecipientFilterPvi")
-
+    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x44\x56\x8D\x4D\xD0\xC6\x45\xC0\x01"),
 #else
-
-    Symbol::FromSignature("\x55\x48\x89\xE5\x41\x57\x49\x89\xD7\x41\x56\x49\x89\xF6\x41\x55\x41\x54")
-
+    Symbol::FromSignature(
+        "\x4C\x8B\xDC\x49\x89\x5B\x2A\x49\x89\x73\x2A\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24"),
 #endif
-
+#elif defined SYSTEM_LINUX
+#if defined ARCHITECTURE_X86_64
+    Symbol::FromSignature("\x55\x48\x89\xE5\x41\x57\x49\x89\xD7\x41\x56\x49\x89\xF6\x41\x55\x41\x54"),
+#else
+    Symbol::FromName("_ZN14CVEngineServer17GMOD_SendToClientEP16IRecipientFilterPvi")
 #endif
-
+#endif
 };
+
+#if defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86_64
+std::vector<Symbol> IServer_Reference = {
+    Symbol::FromSignature("\x48\x8D\x0D\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8D\x0D\x2A"
+                          "\x2A\x2A\x2A\x8B\xD8\xE8\x2A\x2A\x2A\x2A\x2B\xD8")
+};
+#endif
 
 struct GmodDataPackFile
 {
     int time;
 
-#if defined SYSTEM_LINUX
+#if defined SYSTEM_LINUX || (defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86)
 
     const char *name;
     const char *source;
     const char *contents;
 
-#elif defined SYSTEM_WINDOWS
-
+#elif defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86_64
     std::string name;
     std::string source;
     std::string contents;
@@ -88,7 +93,7 @@ struct GmodPlayer
     {
     }
 
-    GmodPlayer(IClient *Client, bool LoadingIn) : Client(Client), LoadingIn(LoadingIn)
+    GmodPlayer(IClient *_Client, bool _LoadingIn) : Client(_Client), LoadingIn(_LoadingIn)
     {
     }
 };
@@ -100,7 +105,7 @@ struct DataPackEntry
     _32CharArray SHA256 = {};
     std::vector<uint8_t> CompressedContents = {};
 
-    DataPackEntry() : Size(0), OriginalSize(0){};
+    DataPackEntry() : Size(0), OriginalSize(0) {};
 
     DataPackEntry(const std::string &EntryFilePath, const std::string &EntryContents,
                   const std::string &EntryOriginalContents);
@@ -112,7 +117,7 @@ struct FileEntry
     int Size;
     uint8_t *SHA256;
 
-    FileEntry() : Size(0), SHA256(nullptr){};
+    FileEntry() : Size(0), SHA256(nullptr) {};
     FileEntry(const std::string &EntryContents, int EntrySize);
 };
 
@@ -128,7 +133,8 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     static CApakrPlugin *Singleton;
 
     std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
-    bool Loaded, ChangingLevel, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled, NeedsDLSetup;
+    bool Loaded, ChangingLevel, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled,
+        NeedsDLSetup;
     std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath, PreviousDLPath, CurrentDLPath;
     std::unordered_map<std::string, FileEntry> FileMap;
     std::filesystem::file_time_type LastTemplateEdit;
@@ -139,29 +145,30 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     int PackedFiles;
 
     CApakrPlugin()
-        : Loaded(false), ChangingLevel(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false), FailedUpload(false),
-          Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0), PackedFiles(0){};
-    ~CApakrPlugin(){};
+        : Loaded(false), ChangingLevel(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false),
+          FailedUpload(false), Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0),
+          PackedFiles(0) {};
+    ~CApakrPlugin() {};
 
     virtual bool Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory);
     virtual void Unload();
-    virtual void Pause(){};
-    virtual void UnPause(){};
+    virtual void Pause() {};
+    virtual void UnPause() {};
 
     virtual const char *GetPluginDescription()
     {
         return "Apakr";
     };
 
-    virtual void LevelInit(const char *Map){};
+    virtual void LevelInit(const char *Map) {};
     virtual void ServerActivate(edict_t *EntityList, int EntityCount, int MaxClients);
     virtual void GameFrame(bool Simulating);
     virtual void LevelShutdown();
     virtual void ClientActive(edict_t *Entity);
     virtual void ClientDisconnect(edict_t *Entity);
-    virtual void ClientPutInServer(edict_t *Entity, const char *Name){};
-    virtual void SetCommandClient(int Index){};
-    virtual void ClientSettingsChanged(edict_t *Entity){};
+    virtual void ClientPutInServer(edict_t *Entity, const char *Name) {};
+    virtual void SetCommandClient(int Index) {};
+    virtual void ClientSettingsChanged(edict_t *Entity) {};
 
     virtual PLUGIN_RESULT ClientConnect(bool *AllowConnection, edict_t *Entity, const char *Name, const char *Address,
                                         char *Rejection, int MaxRejectionLength);
@@ -177,11 +184,11 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     };
 
     virtual void OnQueryCvarValueFinished(QueryCvarCookie_t Cookie, edict_t *Player, EQueryCvarValueStatus Status,
-                                          const char *Name, const char *Value){};
+                                          const char *Name, const char *Value) {};
 
-    virtual void OnEdictAllocated(edict_t *EDict){};
-    virtual void OnEdictFreed(const edict_t *EDict){};
-    virtual void FireGameEvent(IGameEvent *Event){};
+    virtual void OnEdictAllocated(edict_t *EDict) {};
+    virtual void OnEdictFreed(const edict_t *EDict) {};
+    virtual void FireGameEvent(IGameEvent *Event) {};
     void CheckForRepack();
     std::pair<std::string, int> GetDataPackInfo();
     void SetupClientFiles();
@@ -203,8 +210,8 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
   public:
     static GModDataPackProxy Singleton;
 
-    GModDataPackProxy(){};
-    ~GModDataPackProxy(){};
+    GModDataPackProxy() {};
+    ~GModDataPackProxy() {};
 
     bool Load();
     void Unload();
@@ -226,23 +233,92 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     FunctionPointers::GModDataPack_SendFileToClient_t SendFileToClient_Original;
 };
 
-typedef void (*IVEngineServer_GMOD_SendFileToClient_t)(IVEngineServer *, IRecipientFilter *, void *, int);
+typedef void(
+#if defined SYSTEM_WINDOWS && ARCHITECTURE_X86
+    __stdcall
+#endif
+        *IVEngineServer_GMOD_SendFileToClients_t)(IVEngineServer *, IRecipientFilter *, void *, int);
 
 class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngineServerProxy>
 {
   public:
     static IVEngineServerProxy Singleton;
 
-    IVEngineServerProxy(){};
-    ~IVEngineServerProxy(){};
+    IVEngineServerProxy() {};
+    ~IVEngineServerProxy() {};
 
     bool Load();
     void Unload();
-    void GMOD_SendFileToClient(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
+    void
+#if defined SYSTEM_WINDOWS && ARCHITECTURE_X86
+        __stdcall
+#endif
+        GMOD_SendFileToClients(IRecipientFilter *Filter, void *BF_Data, int BF_Size);
 
   private:
-    IVEngineServer_GMOD_SendFileToClient_t GMOD_SendFileToClient_Original;
+    IVEngineServer_GMOD_SendFileToClients_t GMOD_SendFileToClients_Original;
 };
+
+#ifdef SYSTEM_WINDOWS
+void SetConsoleColor(int Color)
+{
+    SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), Color);
+}
+
+void Msg(const char *Format, ...)
+{
+    va_list Arguments;
+
+    va_start(Arguments, Format);
+
+    std::string Message;
+    char Buffer[1024];
+
+    vsnprintf(Buffer, sizeof(Buffer), Format, Arguments);
+
+    Message = std::string(Buffer);
+
+    int White = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
+
+    for (size_t Index = 0; Index < Message.size(); Index++)
+    {
+        if (Message[Index] == '\x1B' && Message[Index + 1] == '[')
+        {
+            int ColorCode = 0;
+            sscanf(&Message[Index + 2], "%dm", &ColorCode);
+
+            switch (ColorCode)
+            {
+            case 91:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_INTENSITY);
+                break;
+            case 93:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+                break;
+            case 94:
+                SetConsoleColor(FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            case 95:
+                SetConsoleColor(FOREGROUND_RED | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            case 96:
+                SetConsoleColor(FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY);
+                break;
+            default:
+                SetConsoleColor(White);
+                break;
+            }
+
+            while (Message[Index] != 'm' && Index < Message.size())
+                Index++;
+        }
+        else
+            std::cout << Message[Index];
+    }
+
+    va_end(Arguments);
+}
+#endif
 
 template <typename Return> Return TimeSince(const Time &When)
 {
@@ -354,6 +430,18 @@ template <class T> T ResolveSymbols(const SourceSDK::FactoryLoader &Loader, cons
     }
 
     return nullptr;
+}
+
+char *GetRealAddressFromRelative(char *Address, int Offset, int InstructionSize)
+{
+    if (!Address)
+        return nullptr;
+
+    char *Instruction = Address + Offset;
+    int RelativeAddress = *(int *)(Instruction);
+    char *RealAddress = Address + InstructionSize + RelativeAddress;
+
+    return RealAddress;
 }
 
 void CloneFile(const std::string &CurrentPath, const std::filesystem::path &FullPath)
