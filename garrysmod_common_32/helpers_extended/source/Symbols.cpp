@@ -162,7 +162,7 @@ namespace Symbols
 
 	const std::vector<Symbol> GModDataPack_SendFileToClient = {
 		Symbol::FromName( "?SendFileToClient@GModDataPack@@QAEXHH@Z" ),
-		Symbol::FromSignature( "\x55\x8B\xEC\x83\xEC\x2A\x53\x8B\x5D" )
+		Symbol::FromSignature( "\x55\x8B\xEC\x83\xEC\x2A\x53\x8B\x5D\x2A\x56\x8B\xF1\x89\x75\x2A\x85\xDB\x0F\x88" )
 	};
 
 	const std::vector<Symbol> CNetChan_IsValidFileForTransfer = {
@@ -178,7 +178,7 @@ namespace Symbols
 
 	const std::vector<Symbol> GModDataPack_AddOrUpdateFile = {
 		Symbol::FromName( "?AddOrUpdateFile@GModDataPack@@QAEXPAULuaFile@@_N@Z" ),
-		Symbol::FromSignature( "\x55\x8B\xEC\x83\xEC\x2A\x53\x8B\xD9" )
+		Symbol::FromSignature( "\x55\x8B\xEC\x83\xEC\x2A\x53\x8B\xD9\x56\x57\x8B\x7D\x2A\x8B\x03" )
 	};
 
 	const Symbol Steam3Server =
