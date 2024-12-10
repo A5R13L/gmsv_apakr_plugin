@@ -275,7 +275,11 @@ void CApakrPlugin::Unload()
 
     for (auto &[_, PackEntry] : this->FileMap)
         if (PackEntry.SHA256)
+        {
             delete PackEntry.SHA256;
+
+            PackEntry.SHA256 = nullptr;
+        }
 
     ConVar_Unregister();
     GModDataPackProxy::Singleton.Unload();
@@ -360,10 +364,6 @@ void CApakrPlugin::LevelShutdown()
     this->FailedUpload = false;
     this->Disabled = false;
     this->WasDisabled = false;
-
-    for (auto &FileMapEntry : this->FileMap)
-        if (FileMapEntry.second.SHA256)
-            delete FileMapEntry.second.SHA256;
 
     this->FileMap.clear();
     this->DataPackMap.clear();
