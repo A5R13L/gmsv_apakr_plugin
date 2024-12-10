@@ -1362,8 +1362,6 @@ void
     if (Length <= 32)
         return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
 
-    std::cout << FilePath << std::endl;
-
     Length = Length - 32;
 
     std::vector<uint8_t> CompressedContents(Length, 0);
