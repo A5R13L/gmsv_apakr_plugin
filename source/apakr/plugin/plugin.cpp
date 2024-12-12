@@ -1125,6 +1125,10 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FileName.c_str(), "rb", "GAME");
     int FileSize = g_pFullFileSystem->Size(Handle);
+
+    std::cout << "FileName == " << FileName.c_str() << std::endl;
+    std::cout << "FileSize == " << FileSize << std::endl;
+
     std::string Contents("", FileSize);
 
     g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);

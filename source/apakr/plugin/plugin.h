@@ -27,7 +27,9 @@
 #include <thread>
 #include <regex>
 
+#ifndef APAKR_VERSION
 #define APAKR_VERSION "unknown"
+#endif
 
 #ifndef FCVAR_LUA_SERVER
 #define FCVAR_LUA_SERVER (1 << 19)
