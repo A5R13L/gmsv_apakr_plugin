@@ -1,3 +1,9 @@
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
 jobs:
   build_windows64:
     runs-on: windows-latest

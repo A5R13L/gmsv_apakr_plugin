@@ -1,3 +1,9 @@
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
 jobs:
   build_linux64:
     runs-on: self-hosted
