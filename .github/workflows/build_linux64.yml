@@ -1,0 +1,26 @@
+jobs:
+  build_linux64:
+    runs-on: self-hosted
+    defaults:
+      run:
+        shell: sh
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: "recursive"
+      - name: Get ref tag
+        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+      - name: Build 64-bit
+        working-directory: ${{ github.workspace }}
+        run: |
+          premake5 gmake2
+          cd projects/x64/linux/gmake2
+          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20 -DAPAKR_VERSION=\"\\\"${TAG}\\\"\"" LDFLAGS="-lpthread -lcurl"
+      - name: Release
+        uses: svenstaro/upload-release-action@2.7.0
+        with:
+          repo_name: A5R13L/gmsv_apakr_plugin
+          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          body: "gmsv_apakr_plugin"
+          file: projects/x64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
+          asset_name: gmsv_apakr_plugin_64.so
