@@ -296,6 +296,9 @@ void Msg(const char *Format, ...)
             case 91:
                 SetConsoleColor(FOREGROUND_RED | FOREGROUND_INTENSITY);
                 break;
+            case 92:
+                SetConsoleColor(FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+                break;
             case 93:
                 SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
                 break;

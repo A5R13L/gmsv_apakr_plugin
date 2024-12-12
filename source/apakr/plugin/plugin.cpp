@@ -942,6 +942,14 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FilePath.c_str(), "rb", "GAME");
 
+    if (!Handle)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mData pack does not exist?\n")
+        Msg("\x1B[94m[Apakr]: \x1B[97mPath: \x1B[93m%s\x1B[97m\n", FilePath.c_str());
+
+        return;
+    }
+
     CApakrPlugin::Singleton->PackedSize = g_pFullFileSystem->Size(Handle);
 
     g_pFullFileSystem->Close(Handle);
@@ -1124,12 +1132,12 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
     CApakrPlugin::Singleton->NeedsRepack = true;
 
     FileHandle_t Handle = g_pFullFileSystem->Open(FileName.c_str(), "rb", "GAME");
+
+    if (!Handle)
+        return Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
+
     int FileSize = g_pFullFileSystem->Size(Handle);
-
-    std::cout << "FileName == " << FileName.c_str() << std::endl;
-    std::cout << "FileSize == " << FileSize << std::endl;
-
-    std::string Contents("", FileSize);
+    std::string Contents(FileSize, "");
 
     g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);
     g_pFullFileSystem->Close(Handle);
