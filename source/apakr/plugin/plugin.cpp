@@ -944,7 +944,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     if (!Handle)
     {
-        Msg("\x1B[94m[Apakr]: \x1B[97mData pack does not exist?\n");
+        Msg("\x1B[94m[Apakr]: \x1B[97mData pack does not exist!\n");
         Msg("\x1B[94m[Apakr]: \x1B[97mPath: \x1B[93m%s\x1B[97m\n", FilePath.c_str());
 
         return;
@@ -1139,7 +1139,7 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
     int FileSize = g_pFullFileSystem->Size(Handle);
     std::string Contents;
 
-    Contents.reserve(FileSize);
+    Contents.resize(FileSize, '\0');
     g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);
     g_pFullFileSystem->Close(Handle);
 
