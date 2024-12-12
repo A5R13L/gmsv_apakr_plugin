@@ -41,7 +41,7 @@ using luaL_loadbufferx_t = decltype(&luaL_loadbufferx);
 std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 #if defined SYSTEM_WINDOWS
 #if defined ARCHITECTURE_X86
-    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x44\x56\x8D\x4D\xD0\xC6\x45\xC0\x01"),
+    Symbol::FromSignature("\x55\x8B\xEC\x83\xEC\x2A\x56\x8D\x4D"),
 #else
     Symbol::FromSignature(
         "\x4C\x8B\xDC\x49\x89\x5B\x2A\x49\x89\x73\x2A\x57\x48\x81\xEC\x2A\x2A\x2A\x2A\x33\xC9\xC6\x44\x24"),
