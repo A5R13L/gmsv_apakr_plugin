@@ -1137,8 +1137,9 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
         return Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
 
     int FileSize = g_pFullFileSystem->Size(Handle);
-    std::string Contents(FileSize, "");
+    std::string Contents;
 
+    Contents.reserve(FileSize);
     g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);
     g_pFullFileSystem->Close(Handle);
 
