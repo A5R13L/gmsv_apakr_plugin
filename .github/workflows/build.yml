@@ -16,12 +16,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
+      - name: Get ref tag
+        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
         run: |
           premake5 gmake2
           cd projects/x32/linux/gmake2
-          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17" LDFLAGS="-lpthread -lcurl"
+          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17 -DAPAKR_VERSION=\"\\\"${TAG}\\\"\"" LDFLAGS="-lpthread -lcurl"
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
@@ -39,12 +41,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
+      - name: Get ref tag
+        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
         run: |
           premake5 gmake2
           cd projects/x64/linux/gmake2
-          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20" LDFLAGS="-lpthread -lcurl"
+          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20 -DAPAKR_VERSION=\"\\\"${TAG}\\\"\"" LDFLAGS="-lpthread -lcurl"
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
@@ -75,7 +79,7 @@ jobs:
           cd ..
           $Env:LINK='crypt32.lib secur32.lib'
           cd projects/x32/windows/vs2022
-          msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
+          msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static /p:DefineConstants="APAKR_VERSION=\"%TAG%\""
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
@@ -106,7 +110,7 @@ jobs:
           cd ..
           $Env:LINK='crypt32.lib secur32.lib'
           cd projects/x64/windows/vs2022
-          msbuild apakr_64.sln /p:Configuration=releasewithsymbols /p:Platform=x64 /p:VcpkgTriplet=x64-windows-static
+          msbuild apakr_64.sln /p:Configuration=releasewithsymbols /p:Platform=x64 /p:VcpkgTriplet=x64-windows-static /p:DefineConstants="APAKR_VERSION=\"%TAG%\""
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:

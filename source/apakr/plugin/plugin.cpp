@@ -110,6 +110,7 @@ int luaL_loadbufferx_Hook(lua_State *L, const char *Buffer, size_t Size, const c
 bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory)
 {
     Msg("\x1B[94m[Apakr]: \x1B[97mLoading...\n");
+    Msg("\x1B[94m[Apakr]: \x1B[97mVersion: \x1B[92m" APAKR_VERSION "\x1B[97m.\n");
 
     g_pFullFileSystem = InterfacePointers::Internal::Server::FileSystem();
 
