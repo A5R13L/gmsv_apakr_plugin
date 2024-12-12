@@ -944,7 +944,7 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     if (!Handle)
     {
-        Msg("\x1B[94m[Apakr]: \x1B[97mData pack does not exist?\n")
+        Msg("\x1B[94m[Apakr]: \x1B[97mData pack does not exist?\n");
         Msg("\x1B[94m[Apakr]: \x1B[97mPath: \x1B[93m%s\x1B[97m\n", FilePath.c_str());
 
         return;
