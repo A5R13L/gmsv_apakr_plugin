@@ -1021,8 +1021,13 @@ void CApakrPlugin::CheckDLSetup()
 
     Downloadables.reserve(g_pDownloadables->GetNumStrings());
 
-    for (int Index = 1; Index < g_pDownloadables->GetNumStrings(); ++Index)
-        Downloadables.push_back(g_pDownloadables->GetString(Index));
+    for (int Index = 0; Index < g_pDownloadables->GetNumStrings(); ++Index)
+    {
+        std::string File = g_pDownloadables->GetString(Index);
+
+        if (this->PreviousDLPath != File)
+            Downloadables.push_back(g_pDownloadables->GetString(Index));
+    }
 
     g_pDownloadables->m_pItems->Purge();
 
