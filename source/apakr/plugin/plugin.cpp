@@ -1142,7 +1142,7 @@ std::pair<void *, std::pair<apakr_filter, apakr_mutate>> LoadExtension(Extension
                                                                        std::string &ExtensionPath,
                                                                        std::string &ExtensionName)
 {
-    void *Module = LoadLibrary(ExtensionPath.c_str());
+    HMODULE Module = LoadLibrary(ExtensionPath.c_str());
 
     if (!Module)
     {
@@ -1167,12 +1167,12 @@ std::pair<void *, std::pair<apakr_filter, apakr_mutate>> LoadExtension(Extension
         return {nullptr, {nullptr, nullptr}};
     }
 
-    return {Module, {Filter, Mutate}};
+    return {(void *)Module, {Filter, Mutate}};
 }
 
 void UnloadExtension(void *Module)
 {
-    FreeLibrary(Module);
+    FreeLibrary((HMODULE)Module);
 }
 #endif
 
