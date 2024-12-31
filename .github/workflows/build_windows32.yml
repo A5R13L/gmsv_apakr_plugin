@@ -28,7 +28,7 @@ jobs:
           .\vcpkg.exe integrate install
           cd ..
           $Env:LINK='crypt32.lib secur32.lib'
-          cd projects/x32/windows/vs2022
+          cd projects/apakr_32/windows/vs2022
           msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static /p:DefineConstants="APAKR_VERSION=\"%TAG%\""
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
@@ -36,5 +36,5 @@ jobs:
           repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
-          file: projects/x32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
+          file: projects/apakr_32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
           asset_name: gmsv_apakr_plugin_32.dll

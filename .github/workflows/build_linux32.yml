@@ -20,7 +20,7 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           premake5 gmake2
-          cd projects/x32/linux/gmake2
+          cd projects/apakr_32/linux/gmake2
           make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17 -DAPAKR_VERSION=\"\\\"${TAG}\\\"\"" LDFLAGS="-lpthread -lcurl"
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
@@ -28,5 +28,5 @@ jobs:
           repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
-          file: projects/x32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
+          file: projects/apakr_32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
           asset_name: gmsv_apakr_plugin_32.so
