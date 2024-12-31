@@ -1140,10 +1140,34 @@ void UnloadExtension(void *Module)
 std::pair<void *, Extension::Capabilities> LoadExtension(Extension::_Type Type, std::string &ExtensionPath,
                                                          std::string &ExtensionName)
 {
+    void *Module = LoadLibrary(ExtensionPath.c_str());
+
+    if (!Module)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to load \x1B[93m%s \x1B[97mextension: \x1B[96m%s\x1B[97m: "
+            "\x1B[91m%s\x1B[97m.\n",
+            Type == Extension::_Type::APakr ? "APakr" : "GLuaPack", ExtensionName.c_str(), GetLastError());
+
+        return {nullptr, {nullptr, nullptr}};
+    }
+
+    apakr_filter Filter = (apakr_filter)GetProcAddress(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
+    apakr_mutate Mutate = (apakr_mutate)GetProcAddress(Module, Extension::_Type::APakr ? "apakr_mutate" : "gluapack_mutate");
+
+    if (!Filter && !Mutate)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to find any exports in \x1B[93m%s \x1B[97mextension \x1B[93m%s\x1B[97m!\n",
+            Type == Extension::_Type::APakr ? "APakr" : "GLuaPack", ExtensionName.c_str());
+
+        return {nullptr, {nullptr, nullptr}};
+    }
+
+    return {Module, {Filter, Mutate}};
 }
 
-void UnloadExtension()
+void UnloadExtension(void *Module)
 {
+    FreeLibrary(Module);
 }
 #endif
 
