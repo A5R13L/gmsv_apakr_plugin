@@ -1113,7 +1113,8 @@ std::pair<void *, std::pair<apakr_filter, apakr_mutate>> LoadExtension(Extension
 
     dlerror();
 
-    apakr_filter Filter = (apakr_filter)dlsym(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
+    apakr_filter Filter =
+        (apakr_filter)dlsym(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
 
     dlerror();
 
@@ -1137,8 +1138,9 @@ void UnloadExtension(void *Module)
     dlclose(Module);
 }
 #else
-std::pair<void *, Extension::Capabilities> LoadExtension(Extension::_Type Type, std::string &ExtensionPath,
-                                                         std::string &ExtensionName)
+std::pair<void *, std::pair<apakr_filter, apakr_mutate>> LoadExtension(Extension::_Type Type,
+                                                                       std::string &ExtensionPath,
+                                                                       std::string &ExtensionName)
 {
     void *Module = LoadLibrary(ExtensionPath.c_str());
 
@@ -1151,8 +1153,11 @@ std::pair<void *, Extension::Capabilities> LoadExtension(Extension::_Type Type, 
         return {nullptr, {nullptr, nullptr}};
     }
 
-    apakr_filter Filter = (apakr_filter)GetProcAddress(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
-    apakr_mutate Mutate = (apakr_mutate)GetProcAddress(Module, Extension::_Type::APakr ? "apakr_mutate" : "gluapack_mutate");
+    apakr_filter Filter =
+        (apakr_filter)GetProcAddress(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
+
+    apakr_mutate Mutate =
+        (apakr_mutate)GetProcAddress(Module, Extension::_Type::APakr ? "apakr_mutate" : "gluapack_mutate");
 
     if (!Filter && !Mutate)
     {
