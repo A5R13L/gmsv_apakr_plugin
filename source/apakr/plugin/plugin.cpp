@@ -18,6 +18,8 @@ ConVar *apakr_upload_url = nullptr;
 ConVar *sv_downloadurl = nullptr;
 ConVar *apakr_activate = nullptr;
 ConVar *apakr_none = nullptr;
+std::string *FileNameToMutate = nullptr;
+std::string *ContentsToMutate = nullptr;
 bool DownloadURLChanged = false;
 bool LuaValue = false;
 std::string CurrentDownloadURL;
@@ -243,6 +245,7 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     CurrentDownloadURL = GetConvarString(sv_downloadurl);
 
     this->LoadPreprocessorTemplates();
+    this->LoadExtensions();
 
     if (GModDataPackProxy::Singleton.Load() && IVEngineServerProxy::Singleton.Load())
         this->Loaded = true;
@@ -256,6 +259,11 @@ void CApakrPlugin::Unload()
 
     if (!this->Loaded)
         return;
+
+    for (Extension &Extension : this->LoadedExtensions)
+        this->CloseExtension(Extension.Handle);
+
+    this->LoadedExtensions.clear();
 
     RemoveConvarChangeCallback(sv_downloadurl, (FnChangeCallback_t)OnDownloadURLChanged_Callback);
     RemoveConvarChangeCallback(apakr_clone_directory, (FnChangeCallback_t)OnCloneDirectoryChanged_Callback);
@@ -360,6 +368,8 @@ void CApakrPlugin::GameFrame(bool Simulating)
 
 void CApakrPlugin::LevelShutdown()
 {
+    FileNameToMutate = nullptr;
+    ContentsToMutate = nullptr;
     g_pLUAServer = nullptr;
 
     this->ChangingLevel = true;
@@ -1085,6 +1095,112 @@ void CApakrPlugin::LoadPreprocessorTemplates()
     this->LastTemplateEdit = std::filesystem::last_write_time(FullPath);
 }
 
+#if defined SYSTEM_LINUX
+std::pair<void *, std::pair<apakr_filter, apakr_mutate>> LoadExtension(Extension::_Type Type,
+                                                                       std::string &ExtensionPath,
+                                                                       std::string &ExtensionName)
+{
+    void *Module = dlopen(ExtensionPath.c_str(), RTLD_LAZY);
+
+    if (!Module)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to load \x1B[93m%s \x1B[97mextension: \x1B[96m%s\x1B[97m: "
+            "\x1B[91m%s\x1B[97m.\n",
+            Type == Extension::_Type::APakr ? "APakr" : "GLuaPack", ExtensionName.c_str(), dlerror());
+
+        return {nullptr, {nullptr, nullptr}};
+    }
+
+    dlerror();
+
+    apakr_filter Filter = (apakr_filter)dlsym(Module, Type == Extension::_Type::APakr ? "apakr_filter" : "gluapack_filter");
+
+    dlerror();
+
+    apakr_mutate Mutate = (apakr_mutate)dlsym(Module, Extension::_Type::APakr ? "apakr_mutate" : "gluapack_mutate");
+
+    dlerror();
+
+    if (!Filter && !Mutate)
+    {
+        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to find any exports in \x1B[93m%s \x1B[97mextension \x1B[93m%s\x1B[97m!\n",
+            Type == Extension::_Type::APakr ? "APakr" : "GLuaPack", ExtensionName.c_str());
+
+        return {nullptr, {nullptr, nullptr}};
+    }
+
+    return {Module, {Filter, Mutate}};
+}
+
+void UnloadExtension(void *Module)
+{
+    dlclose(Module);
+}
+#else
+std::pair<void *, Extension::Capabilities> LoadExtension(Extension::_Type Type, std::string &ExtensionPath,
+                                                         std::string &ExtensionName)
+{
+}
+
+void UnloadExtension()
+{
+}
+#endif
+
+void LoadExtensionsFromPath(Extension::_Type Type, const std::filesystem::directory_entry &Entry)
+{
+    std::filesystem::path FilePath = Entry.path();
+    std::string PathString = FilePath;
+    std::string FileName = FilePath.filename();
+
+    ReplaceAll(FileName, ".so", "");
+    ReplaceAll(FileName, ".dll", "");
+
+    std::pair<void *, std::pair<apakr_filter, apakr_mutate>> Result = LoadExtension(Type, PathString, FileName);
+
+    if (Result.first)
+    {
+        CApakrPlugin::Singleton->LoadedExtensions.push_back(
+            Extension(Extension::_Type::APakr, Result.first, Result.second.first, Result.second.second));
+
+        Msg("\x1B[94m[Apakr]: \x1B[97mLoaded \x1B[93m%s \x1B[97mextension: \x1B[96m%s\x1B[97m.\n",
+            Type == Extension::_Type::APakr ? "APakr" : "GLuaPack", FileName.c_str());
+    }
+}
+
+void CApakrPlugin::LoadExtensions()
+{
+    char FullPath[MAX_PATH];
+
+    if (!g_pFullFileSystem->RelativePathToFullPath_safe("lua/bin/", "GAME", FullPath))
+    {
+        Msg("\x1B[94m[Apakr]: \x1b[97mFailed to get full file path for extensions.\n");
+
+        return;
+    }
+
+    Msg("\x1B[94m[Apakr]: \x1B[97mLoading extensions.\n");
+
+    std::filesystem::path APakrExtensionPath(FullPath);
+    std::filesystem::path GLuaPackExtensionPath(FullPath);
+
+    APakrExtensionPath.append("apakr");
+    GLuaPackExtensionPath.append("gluapack");
+
+    if (std::filesystem::exists(APakrExtensionPath))
+        for (const std::filesystem::directory_entry &Entry : std::filesystem::directory_iterator(APakrExtensionPath))
+            LoadExtensionsFromPath(Extension::_Type::APakr, Entry);
+
+    if (std::filesystem::exists(GLuaPackExtensionPath))
+        for (const std::filesystem::directory_entry &Entry : std::filesystem::directory_iterator(GLuaPackExtensionPath))
+            LoadExtensionsFromPath(Extension::_Type::GLuaPack, Entry);
+}
+
+void CApakrPlugin::CloseExtension(void *Handle)
+{
+    UnloadExtension(Handle);
+}
+
 bool GModDataPackProxy::Load()
 {
     this->AddOrUpdateFile_Original = FunctionPointers::GModDataPack_AddOrUpdateFile();
@@ -1128,7 +1244,19 @@ void GModDataPackProxy::Unload()
     UnHook(this->SendFileToClient_Original);
 }
 
-void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bool Refresh)
+void PathMutator(const char *NewPath)
+{
+    if (FileNameToMutate)
+        *FileNameToMutate = NewPath;
+};
+
+void ContentsMutator(const char *NewContents)
+{
+    if (ContentsToMutate)
+        *ContentsToMutate = NewContents;
+};
+
+void GModDataPackProxy::AddOrUpdateFile(GmodDataPackFile *FileContents, bool Refresh)
 {
     GModDataPackProxy &Self = this->Singleton;
     std::string FileName = FileContents->name;
@@ -1147,6 +1275,30 @@ void GModDataPackProxy::AddOrUpdateFile(const GmodDataPackFile *FileContents, bo
     Contents.resize(FileSize, '\0');
     g_pFullFileSystem->Read(Contents.data(), FileSize, Handle);
     g_pFullFileSystem->Close(Handle);
+
+    FileNameToMutate = &FileName;
+    ContentsToMutate = &Contents;
+
+    for (Extension &Extension : CApakrPlugin::Singleton->LoadedExtensions)
+    {
+        if (Extension.Filter && !Extension.Filter(FileName.c_str(), Contents.c_str()))
+        {
+            FileNameToMutate = nullptr;
+            ContentsToMutate = nullptr;
+
+            return Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
+        }
+
+        if (Extension.Mutate)
+        {
+            Extension.Mutate(Refresh, FileName.c_str(), Contents.c_str(), PathMutator, ContentsMutator);
+
+            FileContents->name = FileName.data();
+        }
+    }
+
+    FileNameToMutate = nullptr;
+    ContentsToMutate = nullptr;
 
     CApakrPlugin::Singleton->FileMap[FileName] = FileEntry(Contents, FileSize);
 
