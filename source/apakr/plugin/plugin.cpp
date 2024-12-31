@@ -1180,7 +1180,8 @@ void LoadExtensionsFromPath(Extension::_Type Type, const std::filesystem::direct
 {
     std::filesystem::path FilePath = Entry.path();
     std::string PathString = FilePath;
-    std::string FileName = FilePath.filename();
+    std::filesystem::path FileNameAsPath = FilePath.filename();
+    std::string FileName = FileNameAsPath.string();
 
     ReplaceAll(FileName, ".so", "");
     ReplaceAll(FileName, ".dll", "");
