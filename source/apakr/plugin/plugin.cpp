@@ -1179,7 +1179,7 @@ void UnloadExtension(void *Module)
 void LoadExtensionsFromPath(Extension::_Type Type, const std::filesystem::directory_entry &Entry)
 {
     std::filesystem::path FilePath = Entry.path();
-    std::string PathString = FilePath;
+    std::string PathString = FilePath.string();
     std::filesystem::path FileNameAsPath = FilePath.filename();
     std::string FileName = FileNameAsPath.string();
 
