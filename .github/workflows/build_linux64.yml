@@ -6,7 +6,7 @@ on:
 
 jobs:
   build_linux64:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux]
     defaults:
       run:
         shell: sh

@@ -6,7 +6,7 @@ on:
 
 jobs:
   build_windows64:
-    runs-on: self-hosted
+    runs-on: [self-hosted, windows]
     steps:
       - uses: actions/checkout@v4
         with:
