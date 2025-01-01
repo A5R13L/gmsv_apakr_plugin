@@ -201,9 +201,9 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
         return true;
     }
 
-    std::string LD_PRELOAD = std::getenv("LD_PRELOAD");
+    const char *LD_PRELOAD = std::getenv("LD_PRELOAD");
 
-    if (LD_PRELOAD == "/physgun/scrds.so")
+    if (LD_PRELOAD && strstr(LD_PRELOAD, "/physgun/scrds.so"))
         Msg("\x1B[94m[Apakr]: \x1B[93mWARNING: \x1B[97mUnable to use server-side pre-processors due to compatibility issues with Physgun Utils.\n");
     else
     {
