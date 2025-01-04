@@ -14,7 +14,7 @@ local function common_helper()
 		links({"crypt32", "secur32"})
 	end
 
-	defines({"APAKR_VERSION=\"" .. (_OPTIONS["tag_version"] or "unknown" .. "\"")})
+	defines({"APAKR_VERSION=\"" .. (_OPTIONS["tag_version"] or "unknown") .. "\""})
 end
 
 CreateWorkspace({name = "apakr_64", abi_compatible = false, path = "projects/apakr_64/" .. os.target() .. "/" .. _ACTION})
