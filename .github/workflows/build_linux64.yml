@@ -14,14 +14,12 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
-      - name: Get ref tag
-        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
         run: |
-          premake5 gmake2
+          premake5 gmake2 --tag_version="${{ github.ref_name }}"
           cd projects/apakr_64/linux/gmake2
-          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20 -DAPAKR_VERSION=\"\\\"${TAG}\\\"\"" LDFLAGS="-lpthread -lcurl"
+          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20 LDFLAGS="-lpthread -lcurl"
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
