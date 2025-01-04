@@ -1555,7 +1555,7 @@ void
 {
     IVEngineServerProxy &Self = this->Singleton;
 
-    if (BF_Size <= 13 || BF_Size > 65535)
+    if (BF_Size <= 13)
         return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
 
     bf_read Buffer(BF_Data, BF_Size);

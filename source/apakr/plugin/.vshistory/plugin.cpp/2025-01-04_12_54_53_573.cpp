@@ -1555,6 +1555,8 @@ void
 {
     IVEngineServerProxy &Self = this->Singleton;
 
+        std::cout << "BF_Size = " << BF_Size << std::endl;
+
     if (BF_Size <= 13 || BF_Size > 65535)
         return Call(Self.GMOD_SendFileToClients_Original, Filter, BF_Data, BF_Size);
 
