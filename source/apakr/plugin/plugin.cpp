@@ -201,19 +201,26 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
         return true;
     }
 
-    if (!LoadBufferXHook.Create(Detouring::Hook::Target((void *)luaL_loadbufferx_Original),
-                                (void *)luaL_loadbufferx_Hook))
+    const char *LD_PRELOAD = std::getenv("LD_PRELOAD");
+
+    if (LD_PRELOAD && strstr(LD_PRELOAD, "/physgun/scrds.so"))
+        Msg("\x1B[94m[Apakr]: \x1B[93mWARNING: \x1B[97mUnable to use server-side pre-processors due to compatibility issues with Physgun Utils.\n");
+    else
     {
-        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to hook \x1B[91mluaL_loadbufferx\x1B[97m!\n");
+        if (!LoadBufferXHook.Create(Detouring::Hook::Target((void *)luaL_loadbufferx_Original),
+                                    (void *)luaL_loadbufferx_Hook))
+        {
+            Msg("\x1B[94m[Apakr]: \x1B[97mFailed to hook \x1B[91mluaL_loadbufferx\x1B[97m!\n");
 
-        return true;
-    }
+            return true;
+        }
 
-    if (!LoadBufferXHook.Enable())
-    {
-        Msg("\x1B[94m[Apakr]: \x1B[97mFailed to enable \x1B[91mluaL_loadbufferx\x1B[97m hook!\n");
+        if (!LoadBufferXHook.Enable())
+        {
+            Msg("\x1B[94m[Apakr]: \x1B[97mFailed to enable \x1B[91mluaL_loadbufferx\x1B[97m hook!\n");
 
-        return true;
+            return true;
+        }
     }
 
     ConVar_Register();
