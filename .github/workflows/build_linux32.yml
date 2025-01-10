@@ -19,7 +19,7 @@ jobs:
         run: |
           premake5 gmake2 --tag_version="${{ github.ref_name }}"
           cd projects/apakr_32/linux/gmake2
-          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17 LDFLAGS="-lpthread -lcurl"
+          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17" LDFLAGS="-lpthread -lcurl"
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
