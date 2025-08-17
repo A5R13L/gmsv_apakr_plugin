@@ -25,13 +25,13 @@ jobs:
           .\vcpkg.exe install curl[ssl]:x86-windows-static
           .\vcpkg.exe integrate install
           cd ..
-          cd projects/apakr_32/windows/vs2022
-          msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
+          cd projects/apakr_64/windows/vs2022
+          msbuild apakr_64.sln /p:Configuration=releasewithsymbols /p:Platform=Win32 /p:VcpkgTriplet=x86-windows-static
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
           repo_name: A5R13L/gmsv_apakr_plugin
           repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
           body: "gmsv_apakr_plugin"
-          file: projects/apakr_32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
+          file: projects/apakr_64/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_64_win32.dll
           asset_name: gmsv_apakr_plugin_32.dll
