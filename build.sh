@@ -3,14 +3,14 @@ if [ -n "$1" ]; then
 else
     ARCH=$(uname -m)
 
-    if [ "$ARCH" == "x86_64" ]; then
+    if [ "$ARCH" = "x86_64" ]; then
         PRESET="x86_64"
     else
         PRESET="x86"
     fi
 fi
 
-if [ "$PRESET" == "x86_64" ]; then
+if [ "$PRESET" = "x86_64" ]; then
     CONFIG="releasewithsymbols_x86_64"
     CXXFLAGS="-std=c++20"
     BUILD_PATH="projects/apakr_64/linux/gmake2"
@@ -19,19 +19,34 @@ if [ "$PRESET" == "x86_64" ]; then
 else
     CONFIG="releasewithsymbols_x86"
     CXXFLAGS="-std=c++17"
-    BUILD_PATH=" projects/apakr_32/linux/gmake2"
+    BUILD_PATH="projects/apakr_32/linux/gmake2"
     ARTIFACT_PATH="projects/apakr_32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll"
     ARTIFACT_NAME="gmsv_apakr_plugin_32.so"
 fi
 
-if [ "$ARCH" == "x86" ]; then
-    dpkg --add-architecture i386
-fi
+apt-get update
+dpkg --add-architecture i386
+apt-get update
 
-apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
+apt-get install -y \
+  build-essential \
+  ninja-build \
+  zip \
+  unzip \
+  tar \
+  pkg-config \
+  wget \
+  gcc-multilib \
+  g++-multilib \
+  cmake \
+  make \
+  curl \
+  libcurl4-openssl-dev \
+  libcurl4-openssl-dev:i386
+
 wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
 tar xf premake-5.0.0-beta2-linux.tar.gz
 mv premake5 /usr/local/bin/
 premake5 gmake2
 cd $BUILD_PATH
-make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS" LDFLAGS="-lpthread -lcurl"
+make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/i386-linux-gnu" LDFLAGS="-lpthread -lcurl"
