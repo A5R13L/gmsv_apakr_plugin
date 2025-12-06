@@ -28,6 +28,9 @@ if [[ "$ARCH" == "x86" ]]; then
     dpkg --add-architecture i386
 fi
 
+wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
+tar xf premake-5.0.0-beta2-linux.tar.gz
+mv premake5 /usr/local/bin/
 apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
 premake5 gmake2
 cd $BUILD_PATH

@@ -32,10 +32,10 @@ cd ..
 $Env:LINK='crypt32.lib secur32.lib'
 
 if ($Preset -eq "x86_64") {
-    cd projects/x64/windows/vs2022
+    cd projects/apakr_64/windows/vs2022
     msbuild apakr_64.sln /p:Configuration=releasewithsymbols /p:Platform=x64 /p:VcpkgTriplet=x64-windows-static
 }
 else {
-    cd projects/x32/windows/vs2022
+    cd projects/apakr_32/windows/vs2022
     msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
 }
