@@ -8,48 +8,38 @@ on:
 
 jobs:
   build_linux32:
-    runs-on: self-hosted
-    defaults:
-      run:
-        shell: sh
+    runs-on: ubuntu-22.04
+    container: debian:11
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          premake5 gmake2
-          cd projects/x32/linux/gmake2
-          make config=releasewithsymbols_x86 CXX=g++-10 CXXFLAGS="-std=c++17" LDFLAGS="-lpthread -lcurl"
+        run: chmod +x build.sh && ./build.sh x86
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
           repo_name: A5R13L/gmsv_apakr_plugin
-          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
           asset_name: gmsv_apakr_plugin_32.so
   build_linux64:
-    runs-on: self-hosted
-    defaults:
-      run:
-        shell: sh
+    runs-on: ubuntu-22.04
+    container: debian:11
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          premake5 gmake2
-          cd projects/x64/linux/gmake2
-          make config=releasewithsymbols_x86_64 CXX=g++-10 CXXFLAGS="-std=c++20" LDFLAGS="-lpthread -lcurl"
+        run: chmod +x build.sh && ./build.sh x86_64
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
           repo_name: A5R13L/gmsv_apakr_plugin
-          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
           asset_name: gmsv_apakr_plugin_64.so
@@ -63,24 +53,12 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          Invoke-WebRequest -Uri 'https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip' -OutFile premake5.zip
-          Expand-Archive premake5.zip -DestinationPath premake5
-          premake5/premake5.exe vs2022
-          git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg
-          .\bootstrap-vcpkg.bat
-          .\vcpkg.exe install curl[ssl]:x86-windows-static
-          .\vcpkg.exe integrate install
-          cd ..
-          $Env:LINK='crypt32.lib secur32.lib'
-          cd projects/x32/windows/vs2022
-          msbuild apakr_32.sln /p:Configuration=releasewithsymbols /p:VcpkgTriplet=x86-windows-static
+        run: .\build.ps1 x86
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
           repo_name: A5R13L/gmsv_apakr_plugin
-          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
           asset_name: gmsv_apakr_plugin_32.dll
@@ -94,24 +72,12 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          Invoke-WebRequest -Uri 'https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip' -OutFile premake5.zip
-          Expand-Archive premake5.zip -DestinationPath premake5
-          premake5/premake5.exe vs2022
-          git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg
-          .\bootstrap-vcpkg.bat
-          .\vcpkg.exe install curl[ssl]:x64-windows-static
-          .\vcpkg.exe integrate install
-          cd ..
-          $Env:LINK='crypt32.lib secur32.lib'
-          cd projects/x64/windows/vs2022
-          msbuild apakr_64.sln /p:Configuration=releasewithsymbols /p:Platform=x64 /p:VcpkgTriplet=x64-windows-static
+        run: .\build.ps1 x86_64
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
           repo_name: A5R13L/gmsv_apakr_plugin
-          repo_token: ${{ secrets.RELEASE_ACCESS_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           body: "gmsv_apakr_plugin"
           file: projects/x64/windows/vs2022/x86_64/ReleaseWithSymbols/gmsv_apakr_64_win64.dll
           asset_name: gmsv_apakr_plugin_64.dll
