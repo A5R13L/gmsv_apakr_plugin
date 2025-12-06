@@ -11,14 +11,14 @@ jobs:
     runs-on: ubuntu-22.04
     container: debian:11
     steps:
+      - name: Install git
+        run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
       - name: Build 32-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          apt-get update && apt-get install -y git
-          chmod +x build.sh && ./build.sh x86
+        run: chmod +x build.sh && ./build.sh x86
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
@@ -31,14 +31,14 @@ jobs:
     runs-on: ubuntu-22.04
     container: debian:11
     steps:
+      - name: Install git
+        run: apt-get update && apt-get install -y git
       - uses: actions/checkout@v3
         with:
           submodules: "recursive"
       - name: Build 64-bit
         working-directory: ${{ github.workspace }}
-        run: |
-          apt-get update && apt-get install -y git
-          chmod +x build.sh && ./build.sh x86
+        run: chmod +x build.sh && ./build.sh x86
       - name: Release
         uses: svenstaro/upload-release-action@2.7.0
         with:
