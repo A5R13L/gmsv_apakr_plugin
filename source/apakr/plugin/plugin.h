@@ -27,6 +27,10 @@
 #include <thread>
 #include <regex>
 
+typedef bool (*apakr_filter)(const char *Path, const char *Contents);
+typedef void (*apakr_mutate)(bool AutoRefresh, const char *Path, const char *Contents, void (*MutatePath)(const char *),
+                             void (*MutateContents)(const char *));
+                             
 #ifndef FCVAR_LUA_SERVER
 #define FCVAR_LUA_SERVER (1 << 19)
 #endif
@@ -58,8 +62,7 @@ std::vector<Symbol> IVEngineServer_GMOD_SendToClient = {
 #if defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86_64
 std::vector<Symbol> IServer_Reference = {
     Symbol::FromSignature("\x48\x8D\x0D\x2A\x2A\x2A\x2A\xE8\x2A\x2A\x2A\x2A\x48\x8D\x0D\x2A"
-                          "\x2A\x2A\x2A\x8B\xD8\xE8\x2A\x2A\x2A\x2A\x2B\xD8")
-};
+                          "\x2A\x2A\x2A\x8B\xD8\xE8\x2A\x2A\x2A\x2A\x2B\xD8")};
 #endif
 
 struct GmodDataPackFile
@@ -68,9 +71,9 @@ struct GmodDataPackFile
 
 #if defined SYSTEM_LINUX || (defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86)
 
-    const char *name;
-    const char *source;
-    const char *contents;
+    char *name;
+    char *source;
+    char *contents;
 
 #elif defined SYSTEM_WINDOWS && defined ARCHITECTURE_X86_64
     std::string name;
@@ -105,7 +108,7 @@ struct DataPackEntry
     _32CharArray SHA256 = {};
     std::vector<uint8_t> CompressedContents = {};
 
-    DataPackEntry() : Size(0), OriginalSize(0) {};
+    DataPackEntry() : Size(0), OriginalSize(0){};
 
     DataPackEntry(const std::string &EntryFilePath, const std::string &EntryContents,
                   const std::string &EntryOriginalContents);
@@ -117,7 +120,7 @@ struct FileEntry
     int Size;
     uint8_t *SHA256;
 
-    FileEntry() : Size(0), SHA256(nullptr) {};
+    FileEntry() : Size(0), SHA256(nullptr){};
     FileEntry(const std::string &EntryContents, int EntrySize);
 };
 
@@ -125,6 +128,24 @@ struct Template
 {
     std::string Pattern;
     std::string Replacement;
+};
+
+struct Extension
+{
+    enum _Type
+    {
+        APakr,
+        GLuaPack
+    } Type;
+
+    void *Handle;
+    apakr_filter Filter;
+    apakr_mutate Mutate;
+
+    Extension() : Type(APakr), Handle(nullptr), Filter(nullptr), Mutate(nullptr){};
+
+    Extension(_Type __Type, void *_Handle, apakr_filter _Filter, apakr_mutate _Mutate)
+        : Type(__Type), Handle(_Handle), Filter(_Filter), Mutate(_Mutate){};
 };
 
 class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
@@ -139,6 +160,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     std::unordered_map<std::string, FileEntry> FileMap;
     std::filesystem::file_time_type LastTemplateEdit;
     std::vector<Template> PreprocessorTemplates;
+    std::vector<Extension> LoadedExtensions;
     std::map<int, DataPackEntry> DataPackMap;
     double UnpackedSize, PackedSize;
     std::vector<GmodPlayer *> Players;
@@ -147,28 +169,28 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     CApakrPlugin()
         : Loaded(false), ChangingLevel(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false),
           FailedUpload(false), Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0),
-          PackedFiles(0) {};
-    ~CApakrPlugin() {};
+          PackedFiles(0){};
+    ~CApakrPlugin(){};
 
     virtual bool Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory);
     virtual void Unload();
-    virtual void Pause() {};
-    virtual void UnPause() {};
+    virtual void Pause(){};
+    virtual void UnPause(){};
 
     virtual const char *GetPluginDescription()
     {
         return "Apakr";
     };
 
-    virtual void LevelInit(const char *Map) {};
+    virtual void LevelInit(const char *Map){};
     virtual void ServerActivate(edict_t *EntityList, int EntityCount, int MaxClients);
     virtual void GameFrame(bool Simulating);
     virtual void LevelShutdown();
     virtual void ClientActive(edict_t *Entity);
     virtual void ClientDisconnect(edict_t *Entity);
-    virtual void ClientPutInServer(edict_t *Entity, const char *Name) {};
-    virtual void SetCommandClient(int Index) {};
-    virtual void ClientSettingsChanged(edict_t *Entity) {};
+    virtual void ClientPutInServer(edict_t *Entity, const char *Name){};
+    virtual void SetCommandClient(int Index){};
+    virtual void ClientSettingsChanged(edict_t *Entity){};
 
     virtual PLUGIN_RESULT ClientConnect(bool *AllowConnection, edict_t *Entity, const char *Name, const char *Address,
                                         char *Rejection, int MaxRejectionLength);
@@ -184,11 +206,11 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     };
 
     virtual void OnQueryCvarValueFinished(QueryCvarCookie_t Cookie, edict_t *Player, EQueryCvarValueStatus Status,
-                                          const char *Name, const char *Value) {};
+                                          const char *Name, const char *Value){};
 
-    virtual void OnEdictAllocated(edict_t *EDict) {};
-    virtual void OnEdictFreed(const edict_t *EDict) {};
-    virtual void FireGameEvent(IGameEvent *Event) {};
+    virtual void OnEdictAllocated(edict_t *EDict){};
+    virtual void OnEdictFreed(const edict_t *EDict){};
+    virtual void FireGameEvent(IGameEvent *Event){};
     void CheckForRepack();
     std::pair<std::string, int> GetDataPackInfo();
     void SetupClientFiles();
@@ -201,6 +223,8 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     void SetupDL(const std::string &FilePath, const std::string &PreviousPath);
     void CheckDLSetup();
     void LoadPreprocessorTemplates();
+    void LoadExtensions();
+    void CloseExtension(void *Handle);
 };
 
 class GModDataPack;
@@ -210,12 +234,12 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
   public:
     static GModDataPackProxy Singleton;
 
-    GModDataPackProxy() {};
-    ~GModDataPackProxy() {};
+    GModDataPackProxy(){};
+    ~GModDataPackProxy(){};
 
     bool Load();
     void Unload();
-    void AddOrUpdateFile(const GmodDataPackFile *File, bool Refresh);
+    void AddOrUpdateFile(GmodDataPackFile *File, bool Refresh);
     _32CharArray GetSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const std::string &Data);
@@ -244,8 +268,8 @@ class IVEngineServerProxy : public Detouring::ClassProxy<IVEngineServer, IVEngin
   public:
     static IVEngineServerProxy Singleton;
 
-    IVEngineServerProxy() {};
-    ~IVEngineServerProxy() {};
+    IVEngineServerProxy(){};
+    ~IVEngineServerProxy(){};
 
     bool Load();
     void Unload();
@@ -291,6 +315,9 @@ void Msg(const char *Format, ...)
             {
             case 91:
                 SetConsoleColor(FOREGROUND_RED | FOREGROUND_INTENSITY);
+                break;
+            case 92:
+                SetConsoleColor(FOREGROUND_GREEN | FOREGROUND_INTENSITY);
                 break;
             case 93:
                 SetConsoleColor(FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
