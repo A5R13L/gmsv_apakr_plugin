@@ -11,7 +11,7 @@ newoption({
 
 local function common_helper()
 	filter("system:windows")
-		links({"crypt32", "secur32"})
+		links({"crypt32", "secur32", "iphlpapi"})
 
 	filter("system:linux")
 		links({"pthread", "curl"})
