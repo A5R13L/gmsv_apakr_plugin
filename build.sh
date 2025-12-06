@@ -49,4 +49,4 @@ tar xf premake-5.0.0-beta2-linux.tar.gz
 mv premake5 /usr/local/bin/
 premake5 gmake2
 cd $BUILD_PATH
-make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/i386-linux-gnu" LDFLAGS="-lpthread -lcurl"
+make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/i386-linux-gnu"

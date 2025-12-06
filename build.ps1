@@ -29,7 +29,6 @@ else {
 
 .\vcpkg.exe integrate install
 cd ..
-$Env:LINK='crypt32.lib secur32.lib iphlpapi.lib'
 
 if ($Preset -eq "x86_64") {
     cd projects/apakr_64/windows/vs2022

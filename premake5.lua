@@ -10,9 +10,13 @@ newoption({
 })
 
 local function common_helper()
-	if os.target() == "windows" then
+	filter("system:windows")
 		links({"crypt32", "secur32"})
-	end
+
+	filter("system:linux")
+		links({"pthread", "curl"})
+
+	filter {}
 
 	defines({"APAKR_VERSION=\"" .. (_OPTIONS["tag_version"] or "unknown") .. "\""})
 end
