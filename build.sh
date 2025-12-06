@@ -3,14 +3,14 @@ if [ -n "$1" ]; then
 else
     ARCH=$(uname -m)
 
-    if [[ "$ARCH" == "x86_64" ]]; then
+    if [ "$ARCH" == "x86_64" ]; then
         PRESET="x86_64"
     else
         PRESET="x86"
     fi
 fi
 
-if [[ "$PRESET" == "x86_64" ]]; then
+if [ "$PRESET" == "x86_64" ]; then
     CONFIG="releasewithsymbols_x86_64"
     CXXFLAGS="-std=c++20"
     BUILD_PATH="projects/x64/linux/gmake2"
@@ -24,14 +24,14 @@ else
     ARTIFACT_NAME="gmsv_apakr_plugin_32.so"
 fi
 
-if [[ "$ARCH" == "x86" ]]; then
+if [ "$ARCH" == "x86" ]; then
     dpkg --add-architecture i386
 fi
 
+apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
 wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
 tar xf premake-5.0.0-beta2-linux.tar.gz
 mv premake5 /usr/local/bin/
-apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
 premake5 gmake2
 cd $BUILD_PATH
 make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS" LDFLAGS="-lpthread -lcurl"
