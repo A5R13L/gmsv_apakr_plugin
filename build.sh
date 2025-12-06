@@ -28,7 +28,7 @@ if [[ "$ARCH" == "x86" ]]; then
     dpkg --add-architecture i386
 fi
 
-apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget git gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
+apt-get update && apt-get install -y build-essential ninja-build curl zip unzip tar pkg-config wget gcc-multilib g++-multilib libcurl4-openssl-dev cmake make
 premake5 gmake2
 cd $BUILD_PATH
 make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS" LDFLAGS="-lpthread -lcurl"
