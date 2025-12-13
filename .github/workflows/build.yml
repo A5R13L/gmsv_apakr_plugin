@@ -28,7 +28,7 @@ jobs:
                   repo_token: ${{ secrets.GITHUB_TOKEN }}
                   body: "gmsv_apakr_plugin"
                   file: projects/apakr_32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
-                  asset_name: gmsv_apakr_plugin_32.dll
+                  asset_name: gmsv_apakr_plugin_32.so
 
     build_linux64:
         runs-on: ubuntu-22.04
@@ -48,7 +48,7 @@ jobs:
                   repo_token: ${{ secrets.GITHUB_TOKEN }}
                   body: "gmsv_apakr_plugin"
                   file: projects/apakr_64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
-                  asset_name: gmsv_apakr_plugin_64.dll
+                  asset_name: gmsv_apakr_plugin_64.so
 
     build_windows32:
         runs-on: windows-latest
