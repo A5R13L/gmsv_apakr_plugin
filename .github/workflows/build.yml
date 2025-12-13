@@ -70,7 +70,7 @@ jobs:
                   repo_token: ${{ secrets.GITHUB_TOKEN }}
                   body: "gmsv_apakr_plugin"
                   file: projects/apakr_32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
-                  asset_name: gmsv_apakr_plugin_32_win.dll
+                  asset_name: gmsv_apakr_plugin_32.dll
 
     build_windows64:
         runs-on: windows-latest
@@ -92,4 +92,4 @@ jobs:
                   repo_token: ${{ secrets.GITHUB_TOKEN }}
                   body: "gmsv_apakr_plugin"
                   file: projects/apakr_64/windows/vs2022/x86_64/ReleaseWithSymbols/gmsv_apakr_64_win64.dll
-                  asset_name: gmsv_apakr_plugin_64_win.dll
+                  asset_name: gmsv_apakr_plugin_64.dll
