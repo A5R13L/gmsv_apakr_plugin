@@ -19,7 +19,7 @@ jobs:
 
             - name: Build 32-bit in Debian 11
               run: |
-                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86 && chown -R 1001:1001 . && chmod -R 777 ."
+                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86 ${{ github.ref_name }} && chown -R 1001:1001 . && chmod -R 777 ."
 
             - name: Release
               uses: svenstaro/upload-release-action@2.7.0
@@ -39,7 +39,7 @@ jobs:
 
             - name: Build 64-bit in Debian 11
               run: |
-                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86_64 && chown -R 1001:1001 . && chmod -R 777 ."
+                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86_64 ${{ github.ref_name }} && chown -R 1001:1001 . && chmod -R 777 ."
     
             - name: Release
               uses: svenstaro/upload-release-action@2.7.0
@@ -61,7 +61,7 @@ jobs:
               uses: microsoft/setup-msbuild@v2
 
             - name: Build 32-bit
-              run: .\build.ps1 x86
+              run: .\build.ps1 x86 ${{ github.ref_name }}
 
             - name: Release
               uses: svenstaro/upload-release-action@2.7.0
@@ -83,7 +83,7 @@ jobs:
               uses: microsoft/setup-msbuild@v2
 
             - name: Build 64-bit
-              run: .\build.ps1 x86_64
+              run: .\build.ps1 x86_64 ${{ github.ref_name }}
 
             - name: Release
               uses: svenstaro/upload-release-action@2.7.0
