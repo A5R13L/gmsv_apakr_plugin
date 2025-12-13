@@ -10,6 +10,12 @@ else
     fi
 fi
 
+if [ -n "$2" ]; then
+    TAG_VERSION="$2"
+else
+    TAG_VERSION="unknown"
+fi
+
 if [ "$PRESET" = "x86_64" ]; then
     CONFIG="releasewithsymbols_x86_64"
     CXXFLAGS="-std=c++20"
@@ -47,6 +53,7 @@ apt-get install -y \
 wget https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-linux.tar.gz
 tar xf premake-5.0.0-beta2-linux.tar.gz
 mv premake5 /usr/local/bin/
-premake5 gmake2
+
+premake5 gmake2 --tag_version=$TAG_VERSION
 cd $BUILD_PATH
 make config=$CONFIG CXX=g++-10 CXXFLAGS="$CXXFLAGS -I/usr/include -I/usr/include/x86_64-linux-gnu -I/usr/include/i386-linux-gnu"

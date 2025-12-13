@@ -1,5 +1,6 @@
 param(
-    [string]$Preset = ""
+    [string]$Preset = "",
+    [string]$TagVersion = ""
 )
 
 if ($Preset -eq "") {
@@ -13,9 +14,13 @@ if ($Preset -eq "") {
     }
 }
 
+if ($TagVersion -eq "") {
+    $TagVersion = "unknown"
+}
+
 Invoke-WebRequest -Uri 'https://github.com/premake/premake-core/releases/download/v5.0.0-beta2/premake-5.0.0-beta2-windows.zip' -OutFile premake5.zip
 Expand-Archive premake5.zip -DestinationPath premake5
-premake5/premake5.exe vs2022
+premake5/premake5.exe vs2022 --tag_version=$TagVersion
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 .\bootstrap-vcpkg.bat
