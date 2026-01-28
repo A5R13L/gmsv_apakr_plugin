@@ -32,11 +32,7 @@
 typedef bool (*apakr_filter)(const char *Path, const char *Contents);
 typedef void (*apakr_mutate)(bool AutoRefresh, const char *Path, const char *Contents, void (*MutatePath)(const char *),
                              void (*MutateContents)(const char *));
-
-#ifndef APAKR_VERSION
-#define APAKR_VERSION "unknown"
-#endif
-
+                             
 #ifndef FCVAR_LUA_SERVER
 #define FCVAR_LUA_SERVER (1 << 19)
 #endif

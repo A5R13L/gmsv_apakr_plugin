@@ -1,0 +1,95 @@
+name: build
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+jobs:
+    build_linux32:
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  submodules: "recursive"
+
+            - name: Build 32-bit in Debian 11
+              run: |
+                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86 ${{ github.ref_name }} && chown -R 1001:1001 . && chmod -R 777 ."
+
+            - name: Release
+              uses: svenstaro/upload-release-action@2.7.0
+              with:
+                  repo_name: A5R13L/gmsv_apakr_plugin
+                  repo_token: ${{ secrets.GITHUB_TOKEN }}
+                  body: "gmsv_apakr_plugin"
+                  file: projects/apakr_32/linux/gmake2/x86/ReleaseWithSymbols/gmsv_apakr_32_linux.dll
+                  asset_name: gmsv_apakr_plugin_32.so
+
+    build_linux64:
+        runs-on: ubuntu-22.04
+        steps:
+            - uses: actions/checkout@v3
+              with:
+                  submodules: "recursive"
+
+            - name: Build 64-bit in Debian 11
+              run: |
+                  docker run --rm -v "$PWD:/work" -w /work debian:11 bash -c "chmod +x build.sh && ./build.sh x86_64 ${{ github.ref_name }} && chown -R 1001:1001 . && chmod -R 777 ."
+    
+            - name: Release
+              uses: svenstaro/upload-release-action@2.7.0
+              with:
+                  repo_name: A5R13L/gmsv_apakr_plugin
+                  repo_token: ${{ secrets.GITHUB_TOKEN }}
+                  body: "gmsv_apakr_plugin"
+                  file: projects/apakr_64/linux/gmake2/x86_64/ReleaseWithSymbols/gmsv_apakr_64_linux64.dll
+                  asset_name: gmsv_apakr_plugin_64.so
+
+    build_windows32:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: "recursive"
+
+            - name: Install msbuild
+              uses: microsoft/setup-msbuild@v2
+
+            - name: Build 32-bit
+              run: .\build.ps1 x86 ${{ github.ref_name }}
+
+            - name: Release
+              uses: svenstaro/upload-release-action@2.7.0
+              with:
+                  repo_name: A5R13L/gmsv_apakr_plugin
+                  repo_token: ${{ secrets.GITHUB_TOKEN }}
+                  body: "gmsv_apakr_plugin"
+                  file: projects/apakr_32/windows/vs2022/x86/ReleaseWithSymbols/gmsv_apakr_32_win32.dll
+                  asset_name: gmsv_apakr_plugin_32.dll
+
+    build_windows64:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  submodules: "recursive"
+
+            - name: Install msbuild
+              uses: microsoft/setup-msbuild@v2
+
+            - name: Build 64-bit
+              run: .\build.ps1 x86_64 ${{ github.ref_name }}
+
+            - name: Release
+              uses: svenstaro/upload-release-action@2.7.0
+              with:
+                  repo_name: A5R13L/gmsv_apakr_plugin
+                  repo_token: ${{ secrets.GITHUB_TOKEN }}
+                  body: "gmsv_apakr_plugin"
+                  file: projects/apakr_64/windows/vs2022/x86_64/ReleaseWithSymbols/gmsv_apakr_64_win64.dll
+                  asset_name: gmsv_apakr_plugin_64.dll
