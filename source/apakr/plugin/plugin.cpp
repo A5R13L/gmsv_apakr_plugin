@@ -1,5 +1,7 @@
 #include <apakr/plugin/plugin.h>
 
+class SVC_GMod_ServerToClient;
+
 GModDataPackProxy GModDataPackProxy::Singleton;
 IVEngineServerProxy IVEngineServerProxy::Singleton;
 CApakrPlugin *CApakrPlugin::Singleton = new CApakrPlugin();
@@ -10,6 +12,7 @@ CNetworkStringTable *g_pClientLuaFiles = nullptr;
 CNetworkStringTable *g_pDownloadables = nullptr;
 GarrysMod::Lua::ILuaShared *g_pILuaShared = nullptr;
 GarrysMod::Lua::ILuaInterface *g_pLUAServer = nullptr;
+SVC_GMod_ServerToClient *RefreshNetMessage = nullptr;
 ConVar *apakr_file = nullptr;
 ConVar *apakr_sha256 = nullptr;
 ConVar *apakr_key = nullptr;
@@ -81,12 +84,15 @@ void OnApakrNoneChanged_Callback(ConVar *_this, const char *, float)
 {
 }
 
-DataPackEntry::DataPackEntry(const std::string &EntryFilePath, const std::string &EntryCode,
-                             const std::string &EntryOriginalCode)
-    : FilePath(EntryFilePath), Contents(EntryCode), OriginalContents(EntryOriginalCode)
+DataPackEntry::DataPackEntry(const std::string &EntryFullFilePath, const std::string &EntryContents,
+                             const std::string &EntryOriginalContents)
+    : FullFilePath(EntryFullFilePath), Contents(EntryContents), OriginalContents(EntryOriginalContents)
 {
+    ReplaceAll(this->FullFilePath, "\\", "/");
     ReplaceAll(this->Contents, "\r", "");
     GModDataPackProxy::Singleton.ProcessFile(this->Contents);
+
+    this->RelativeFilePath = GModDataPackProxy::Singleton.GetRelativeLuaPath(this->FullFilePath);
 
     this->Size = (int)this->Contents.size() + 1;
     this->OriginalSize = (int)this->OriginalContents.size() + 1;
@@ -204,7 +210,8 @@ bool CApakrPlugin::Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn Ga
     const char *LD_PRELOAD = std::getenv("LD_PRELOAD");
 
     if (LD_PRELOAD && strstr(LD_PRELOAD, "/physgun/scrds.so"))
-        Msg("\x1B[94m[Apakr]: \x1B[93mWARNING: \x1B[97mUnable to use server-side pre-processors due to compatibility issues with Physgun Utils.\n");
+        Msg("\x1B[94m[Apakr]: \x1B[93mWARNING: \x1B[97mUnable to use server-side pre-processors due to compatibility "
+            "issues with Physgun Utils.\n");
     else
     {
         if (!LoadBufferXHook.Create(Detouring::Hook::Target((void *)luaL_loadbufferx_Original),
@@ -367,7 +374,7 @@ void CApakrPlugin::GameFrame(bool Simulating)
     if (this->Disabled)
         return;
 
-    if (this->Packing)
+    if (!this->PackReady)
         for (GmodPlayer *Player : this->Players)
             if (Player && Player->Client && Player->LoadingIn && Player->Client->IsConnected())
                 Player->Client->Reconnect();
@@ -378,6 +385,7 @@ void CApakrPlugin::LevelShutdown()
     FileNameToMutate = nullptr;
     ContentsToMutate = nullptr;
     g_pLUAServer = nullptr;
+    RefreshNetMessage = nullptr;
 
     this->ChangingLevel = true;
     this->FailedUpload = false;
@@ -455,27 +463,29 @@ void CApakrPlugin::CheckForRepack()
 std::pair<std::string, int> CApakrPlugin::GetDataPackInfo()
 {
     int NeededSize = 0;
-    std::vector<std::pair<std::string, std::string>> FileList;
-    std::string OutputBuffer;
+    std::vector<std::pair<std::pair<std::string, std::string>, std::string>> FileList;
 
     for (auto &[_, PackEntry] : this->DataPackMap)
     {
         NeededSize += 15;
+        NeededSize += 15;
         NeededSize += 6;
         NeededSize += PackEntry.OriginalSize;
 
-        FileList.push_back({PackEntry.FilePath, GModDataPackProxy::Singleton.SHA256ToHex(PackEntry.SHA256)});
+        FileList.push_back({{PackEntry.FullFilePath, PackEntry.RelativeFilePath},
+                            GModDataPackProxy::Singleton.SHA256ToHex(PackEntry.SHA256)});
     }
 
     std::sort(FileList.begin(), FileList.end(),
-              [](std::pair<std::string, std::string> &First, std::pair<std::string, std::string> &Second) {
-                  return First.first < Second.first;
+              [](std::pair<std::pair<std::string, std::string>, std::string> &First,
+                 std::pair<std::pair<std::string, std::string>, std::string> &Second) {
+                  return First.first.first < Second.first.first;
               });
 
     std::string SHABuffer;
 
-    for (auto &[FilePath, FileSHA256] : FileList)
-        SHABuffer += FilePath + ":" + FileSHA256;
+    for (auto &[FilePathPair, FileSHA256] : FileList)
+        SHABuffer += FilePathPair.first + "@" + FilePathPair.second + ":" + FileSHA256;
 
     return {GModDataPackProxy::Singleton.GetHexSHA256(SHABuffer), NeededSize};
 }
@@ -842,7 +852,6 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
     auto [PackKey, NeededSize] = CApakrPlugin::Singleton->GetDataPackInfo();
     std::string CurrentFile = FilePath;
     std::vector<std::string> PreviousPacks;
-    std::string OutputBuffer;
     Bootil::_AutoBuffer EncryptedDataPack;
     Bootil::_AutoBuffer DataPack(NeededSize);
 
@@ -851,17 +860,22 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
 
     for (auto &[_, PackEntry] : CApakrPlugin::Singleton->DataPackMap)
     {
-        std::string SaltedPath =
-            GModDataPackProxy::Singleton.GetHexSHA256(CApakrPlugin::Singleton->CurrentPackKey + PackEntry.FilePath)
+        std::string SaltedFullPath =
+            GModDataPackProxy::Singleton.GetHexSHA256(CApakrPlugin::Singleton->CurrentPackKey + PackEntry.FullFilePath)
+                .substr(0, 15);
+
+        std::string SaltedRelativePath =
+            GModDataPackProxy::Singleton
+                .GetHexSHA256(CApakrPlugin::Singleton->CurrentPackKey + PackEntry.RelativeFilePath)
                 .substr(0, 15);
 
         std::string HexSize = PaddedHex(PackEntry.OriginalSize, 6);
 
-        DataPack.Write(SaltedPath.data(), 15);
+        DataPack.Write(SaltedFullPath.data(), 15);
+        DataPack.Write(SaltedRelativePath.data(), 15);
         DataPack.Write(HexSize.data(), 6);
         DataPack.Write(PackEntry.OriginalContents.data(), PackEntry.OriginalSize);
 
-        OutputBuffer += SaltedPath + HexSize + PackEntry.OriginalContents;
         CApakrPlugin::Singleton->PackedFiles++;
     }
 
@@ -896,10 +910,9 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
                     .detach();
         }
 
-        CApakrPlugin::Singleton->SetupDL(CurrentPath, CurrentFile);
-
         CApakrPlugin::Singleton->Packing = false;
-        CApakrPlugin::Singleton->PackReady = true;
+
+        CApakrPlugin::Singleton->SetupDL(CurrentPath, CurrentFile);
 
         return;
     }
@@ -993,10 +1006,9 @@ void BuildAndWriteDataPack_Thread(const std::string &ClonePath, const std::strin
                 .detach();
     }
 
-    CApakrPlugin::Singleton->SetupDL(FilePath, CurrentFile);
-
     CApakrPlugin::Singleton->Packing = false;
-    CApakrPlugin::Singleton->PackReady = true;
+
+    CApakrPlugin::Singleton->SetupDL(FilePath, CurrentFile);
 }
 
 void CApakrPlugin::BuildAndWriteDataPack()
@@ -1031,7 +1043,7 @@ void CApakrPlugin::SetupDL(const std::string &FilePath, const std::string &Previ
 
 void CApakrPlugin::CheckDLSetup()
 {
-    if (!this->NeedsDLSetup || this->Packing || !this->PackReady)
+    if (!this->NeedsDLSetup || this->Packing)
         return;
 
     std::vector<std::string> Downloadables;
@@ -1063,6 +1075,7 @@ void CApakrPlugin::CheckDLSetup()
         this->CurrentDLPath.c_str());
 
     this->NeedsDLSetup = false;
+    this->PackReady = true;
 }
 
 void CApakrPlugin::LoadPreprocessorTemplates()
@@ -1343,9 +1356,112 @@ void GModDataPackProxy::AddOrUpdateFile(GmodDataPackFile *FileContents, bool Ref
     GModDataPackProxy::Singleton.ProcessFile(CApakrPlugin::Singleton->FileMap[FileName].Contents);
 
     if (Refresh)
+    {
         Msg("\x1B[94m[Apakr]: \x1B[97mAutorefresh: \x1B[93m%s\x1B[97m. Rebuilding data pack...\n", FileName.c_str());
+        GModDataPackProxy::Singleton.BroadcastRefresh(FileName);
+    }
 
     Call(Self.AddOrUpdateFile_Original, (LuaFile *)FileContents, Refresh);
+}
+
+class SVC_GMod_ServerToClient : public INetMessage
+{
+  public:
+    void SetNetChannel(INetChannel *NetChannel)
+    {
+        this->m_pNetChannel = NetChannel;
+    }
+
+    void SetReliable(bool Reliable)
+    {
+        this->m_bReliable = Reliable;
+    }
+
+    bool Process()
+    {
+        return true;
+    }
+
+    bool ReadFromBuffer(bf_read &)
+    {
+        return true;
+    }
+
+    bool WriteToBuffer(bf_write &Buffer)
+    {
+        this->m_nLength = m_DataOut.GetNumBitsWritten();
+
+        Buffer.WriteUBitLong(GetType(), 6);
+        Buffer.WriteUBitLong(this->m_nLength, 20);
+
+        return Buffer.WriteBits(m_DataOut.GetBasePointer(), this->m_nLength);
+    }
+
+    bool IsReliable() const
+    {
+        return this->m_bReliable;
+    }
+
+    int GetType() const
+    {
+        return 33;
+    }
+
+    int GetGroup() const
+    {
+        return INetChannelInfo::USERMESSAGES;
+    }
+
+    const char *GetName() const
+    {
+        return "svc_GMod_ServerToClient";
+    }
+
+    INetChannel *GetNetChannel() const
+    {
+        return this->m_pNetChannel;
+    }
+
+    const char *ToString() const
+    {
+        return "";
+    }
+
+    int m_nLength;
+    bf_read m_DataIn;
+    bf_write m_DataOut;
+    INetChannel *m_pNetChannel;
+    bool m_bReliable;
+    BYTE m_writeBuffer[0xFFFF];
+};
+
+void GModDataPackProxy::BroadcastRefresh(const std::string &FullFilePath)
+{
+    static unsigned short EventID = INVALID_STRING_INDEX;
+
+    std::string RelativeFilePath = GModDataPackProxy::Singleton.GetRelativeLuaPath(FullFilePath);
+
+    if (EventID == INVALID_STRING_INDEX)
+    {
+        CNetworkStringTable *Table = (CNetworkStringTable *)g_pNetworkStringTableContainer->FindTable("networkstring");
+
+        if (Table)
+            EventID = Table->AddString(true, "gmsv_apakr::refresh");
+    }
+
+    if (EventID == INVALID_STRING_INDEX)
+        return;
+
+    RefreshNetMessage = new SVC_GMod_ServerToClient();
+
+    RefreshNetMessage->m_DataOut.StartWriting(RefreshNetMessage->m_writeBuffer,
+                                              sizeof(RefreshNetMessage->m_writeBuffer));
+
+    RefreshNetMessage->m_DataOut.WriteByte(0);
+    RefreshNetMessage->m_DataOut.WriteWord(EventID);
+    RefreshNetMessage->m_DataOut.WriteString(FullFilePath.c_str());
+    RefreshNetMessage->m_DataOut.WriteString(RelativeFilePath.c_str());
+    g_pServer->BroadcastMessage(*RefreshNetMessage, true, true);
 }
 
 _32CharArray GModDataPackProxy::GetSHA256(const char *Data, size_t Length)
@@ -1477,6 +1593,19 @@ void GModDataPackProxy::ProcessFile(std::string &Code)
         {
         }
     }
+}
+
+std::string GModDataPackProxy::GetRelativeLuaPath(const std::string &FullPath)
+{
+    std::string RelativeFilePath = FullPath;
+
+    RelativeFilePath = std::regex_replace(RelativeFilePath, std::regex("^addons/[^/]+/"), "");
+    RelativeFilePath = std::regex_replace(RelativeFilePath, std::regex("^gamemodes/([^/]+)/gamemode/"), "$1/gamemode/");
+    RelativeFilePath = std::regex_replace(RelativeFilePath, std::regex("^gamemodes/[^/]+/entities/"), "entities/");
+    RelativeFilePath = std::regex_replace(RelativeFilePath, std::regex("^gamemodes/[^/]+/weapons/"), "weapons/");
+    RelativeFilePath = std::regex_replace(RelativeFilePath, std::regex("^lua/"), "");
+
+    return RelativeFilePath;
 }
 
 void GModDataPackProxy::SendDataPackFile(int Client, int FileID)

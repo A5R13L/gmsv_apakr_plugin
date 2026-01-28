@@ -19,6 +19,8 @@
 #include <apakr/convar.h>
 #include <bzip2/bzlib.h>
 #include <inetchannel.h>
+#include <inetmessage.h>
+#include <inetmsghandler.h>
 #include <curl/curl.h>
 #include <filesystem>
 #include <lauxlib.h>
@@ -107,7 +109,7 @@ struct GmodPlayer
 
 struct DataPackEntry
 {
-    std::string FilePath, Contents, OriginalContents;
+    std::string FullFilePath, RelativeFilePath, Contents, OriginalContents;
     int Size, OriginalSize;
     _32CharArray SHA256 = {};
     std::vector<uint8_t> CompressedContents = {};
@@ -158,8 +160,10 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
     static CApakrPlugin *Singleton;
 
     std::chrono::time_point<std::chrono::system_clock> LastRepack, LastUploadBegan, LastTemplateUpdate;
+
     bool Loaded, ChangingLevel, Ready, PackReady, NeedsRepack, Packing, FailedUpload, Disabled, WasDisabled,
         NeedsDLSetup;
+ 
     std::string CurrentPackName, CurrentPackSHA256, CurrentPackKey, TemplatePath, PreviousDLPath, CurrentDLPath;
     std::unordered_map<std::string, FileEntry> FileMap;
     std::filesystem::file_time_type LastTemplateEdit;
@@ -174,6 +178,7 @@ class CApakrPlugin : public IServerPluginCallbacks, public IGameEventListener2
         : Loaded(false), ChangingLevel(false), Ready(false), PackReady(false), NeedsRepack(false), Packing(false),
           FailedUpload(false), Disabled(false), WasDisabled(false), NeedsDLSetup(false), UnpackedSize(0), PackedSize(0),
           PackedFiles(0){};
+
     ~CApakrPlugin(){};
 
     virtual bool Load(CreateInterfaceFn InterfaceFactory, CreateInterfaceFn GameServerFactory);
@@ -244,6 +249,7 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     bool Load();
     void Unload();
     void AddOrUpdateFile(GmodDataPackFile *File, bool Refresh);
+    void BroadcastRefresh(const std::string &FullFilePath);
     _32CharArray GetSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const char *Data, size_t Length);
     std::string GetHexSHA256(const std::string &Data);
@@ -253,6 +259,7 @@ class GModDataPackProxy : public Detouring::ClassProxy<GModDataPack, GModDataPac
     std::string Decompress(const uint8_t *Input, int Size);
     std::vector<uint8_t> BZ2(const uint8_t *Input, int Size);
     void ProcessFile(std::string &Code);
+    std::string GetRelativeLuaPath(const std::string &FullPath);
     void SendDataPackFile(int Client, int FileID);
     void SendFileToClient(int Client, int FileID);
 
